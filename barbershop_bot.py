@@ -591,6 +591,10 @@ async def handle_status_change(update: Update, context: CallbackContext) -> None
         for i, row in enumerate(bookings[1:], start=2):  # Start from 2 because of 1-based index and header row
             if row[0] == booking_id:
                 SHEET.update_cell(i, 6, "Done")  # Update status column
+                # Clear notification cache for this user
+                for key in list(NOTIFICATION_CACHE.keys()):
+                    if key.startswith(f"{booking_id}_"):
+                        del NOTIFICATION_CACHE[key]
                 await query.message.reply_text(f"✅ تم تغيير حالة الحجز إلى 'تم'")
                 return
         
@@ -781,8 +785,8 @@ def main():
         if app.job_queue:
             # Clear any existing jobs
             app.job_queue.remove_all_jobs()
-            # Add the notification job
-            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=5)
+            # Add the notification job with a shorter interval
+            app.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
             logging.info("Job queue initialized successfully")
         else:
             logging.error("Job queue not available")
