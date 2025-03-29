@@ -36,10 +36,9 @@ client = gspread.authorize(CREDS)
 SHEET = client.open("3ami tayeb").sheet1
 
 # Define conversation states
-SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE = range(3)
+SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE, ADMIN_VERIFICATION = range(4)
 ADMIN_ID = "5333075597"  # Replace with your Telegram ID
-ADMIN_PASSWORD = "KIKO"  # Replace with a secure password
-ADMIN_VERIFICATION = range(1)  # New conversation state for admin verification
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'tayeb2020')  # Default to 'KIKO' if not set
 
 # Store notification status to prevent duplicate notifications
 NOTIFICATION_CACHE = {}
@@ -420,22 +419,36 @@ async def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 async def admin_panel(update: Update, context: CallbackContext) -> None:
-    if str(update.message.chat_id) != ADMIN_ID:
+    user_id = str(update.message.chat_id)
+    
+    if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
         return
     
-    keyboard = [
-        [BTN_VIEW_WAITING, BTN_VIEW_DONE],
-        [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
-        [BTN_CHANGE_STATUS, BTN_DELETE],
-        [BTN_ADD, BTN_REFRESH]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "🔐 مرحبا بيك في لوحة التحكم\n"
-        "اختار واش تحب دير:",
-        reply_markup=reply_markup
-    )
+    # Ask for password
+    await update.message.reply_text("من فضلك أدخل كلمة السر للدخول إلى لوحة التحكم:")
+    return ADMIN_VERIFICATION  # Move to the password verification state
+
+async def verify_admin_password(update: Update, context: CallbackContext) -> int:
+    entered_password = update.message.text.strip()
+    
+    if entered_password == ADMIN_PASSWORD:
+        keyboard = [
+            [BTN_VIEW_WAITING, BTN_VIEW_DONE],
+            [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
+            [BTN_CHANGE_STATUS, BTN_DELETE],
+            [BTN_ADD, BTN_REFRESH]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "🔐 مرحبا بيك في لوحة التحكم\n"
+            "اختار واش تحب دير:",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("❌ كلمة السر غير صحيحة. حاول مرة أخرى.")
+        return ADMIN_VERIFICATION  # Stay in the password verification state
 
 async def view_all_bookings(update: Update, context: CallbackContext) -> None:
     user_id = str(update.message.chat_id)
@@ -698,12 +711,14 @@ def main():
     # Fix the conversation handler patterns to match Arabic text
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber)
+            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
+            CommandHandler("admin", admin_panel)  # Entry point for admin
         ],
         states={
             SELECTING_BARBER: [CallbackQueryHandler(barber_selection, pattern="^barber_")],
             ENTERING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
-            ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)]
+            ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)],
+            ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)]  # New state for password verification
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
