@@ -144,6 +144,36 @@ async def check_and_notify_users(context: CallbackContext):
                     save_notification_status(user_id, "warning")
                     logging.info(f"Sent 15-min warning to user {user_id}")
                 
+                # Send 30-minute warning to third in line
+                elif position == 2 and not was_recently_notified(user_id, "warning_30"):
+                    await context.bot.send_message(
+                        chat_id=int(user_id),
+                        text=f"🔔 {user_name}! دورك غادي يجي مع {barber} في 30 دقيقة.\n"
+                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                    )
+                    save_notification_status(user_id, "warning_30")
+                    logging.info(f"Sent 30-min warning to user {user_id}")
+                
+                # Send 45-minute warning to fourth in line
+                elif position == 3 and not was_recently_notified(user_id, "warning_45"):
+                    await context.bot.send_message(
+                        chat_id=int(user_id),
+                        text=f"🔔 {user_name}! دورك غادي يجي مع {barber} في 45 دقيقة.\n"
+                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                    )
+                    save_notification_status(user_id, "warning_45")
+                    logging.info(f"Sent 45-min warning to user {user_id}")
+                
+                # Send 1-hour warning to fifth in line
+                elif position == 4 and not was_recently_notified(user_id, "warning_60"):
+                    await context.bot.send_message(
+                        chat_id=int(user_id),
+                        text=f"🔔 {user_name}! دورك غادي يجي مع {barber} في ساعة.\n"
+                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                    )
+                    save_notification_status(user_id, "warning_60")
+                    logging.info(f"Sent 60-min warning to user {user_id}")
+                
             except Exception as e:
                 logging.error(f"Failed to send notification to user {user_id}: {str(e)}")
                 continue
@@ -513,14 +543,23 @@ async def view_waiting_bookings(update: Update, context: CallbackContext) -> Non
 
         message = "📋 لي راهم يستناو:\n\n"
         for i, booking in enumerate(waiting_bookings, 1):
-            message += (f"{i}. الاسم: {booking[1]}\n"
-                       f"   التيليفون: {booking[2]}\n"
-                       f"   الحلاق: {booking[3]}\n"
-                       f"   الوقت: {booking[4]}\n"
-                       f"   التذكرة: {booking[6]}\n"
-                       f"{'─' * 20}\n")
-
-        await update.message.reply_text(message)
+            # Add status change and delete buttons for each booking
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ خلاص", callback_data=f"status_{booking[0]}"),
+                    InlineKeyboardButton("❌ امسح", callback_data=f"delete_{booking[0]}")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = (f"{i}. الاسم: {booking[1]}\n"
+                      f"   التيليفون: {booking[2]}\n"
+                      f"   الحلاق: {booking[3]}\n"
+                      f"   الوقت: {booking[4]}\n"
+                      f"   التذكرة: {booking[6]}\n"
+                      f"{'─' * 20}\n")
+            
+            await update.message.reply_text(message, reply_markup=reply_markup)
 
     except Exception as e:
         logging.error(f"Error in view_waiting_bookings: {str(e)}")
@@ -651,6 +690,45 @@ async def view_barber_bookings(update: Update, context: CallbackContext) -> None
         logging.error(f"Error in view_barber_bookings: {str(e)}")
         await update.message.reply_text("كاين مشكل. عاود حاول.")
 
+async def handle_add_client(update: Update, context: CallbackContext) -> None:
+    """Handle adding a new client directly"""
+    if str(update.message.chat_id) != ADMIN_ID:
+        return
+    
+    try:
+        # Start the booking process for admin
+        keyboard = [[InlineKeyboardButton(name, callback_data=id)] for id, name in BARBERS.items()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("شكون من حلاق تحب:", reply_markup=reply_markup)
+        context.user_data['is_admin_booking'] = True
+        return SELECTING_BARBER
+    except Exception as e:
+        logging.error(f"Error in handle_add_client: {str(e)}")
+        await update.message.reply_text("❌ حدث خطأ أثناء إضافة العميل")
+
+async def handle_refresh(update: Update, context: CallbackContext) -> None:
+    """Handle refreshing the admin panel"""
+    if str(update.message.chat_id) != ADMIN_ID:
+        return
+    
+    try:
+        refresh_google_sheets_connection()
+        keyboard = [
+            [BTN_VIEW_WAITING, BTN_VIEW_DONE],
+            [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
+            [BTN_CHANGE_STATUS, BTN_DELETE],
+            [BTN_ADD, BTN_REFRESH]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "🔄 تم تحديث البيانات\n"
+            "اختار واش تحب دير:",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logging.error(f"Error in handle_refresh: {str(e)}")
+        await update.message.reply_text("❌ حدث خطأ أثناء تحديث البيانات")
+
 def main():
     try:
         app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -659,7 +737,8 @@ def main():
         conv_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-                CommandHandler("admin", admin_panel)
+                CommandHandler("admin", admin_panel),
+                MessageHandler(filters.Regex(f"^{BTN_ADD}$"), handle_add_client)
             ],
             states={
                 SELECTING_BARBER: [
@@ -687,12 +766,13 @@ def main():
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_DONE}$"), view_done_bookings))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
         app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
         # Initialize job queue with more frequent checks
         if app.job_queue:
-            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=5)  # Check every 30 seconds
+            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=10)  # Check every minute
             logging.info("Job queue initialized successfully")
         else:
             logging.error("Job queue not available")
