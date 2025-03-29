@@ -214,7 +214,7 @@ def generate_ticket_number() -> int:
 
 # ---------------- Telegram Bot Handlers ----------------
 async def start(update: Update, context: CallbackContext) -> None:
-    keyboard = [["📋 شوف لاشان", "📅 دير رندي فو"],
+    keyboard = [["📋 شوف لاشان", "📅 دير رنديفو"],  # Changed to match BTN_BOOK_APPOINTMENT
                 ["⏳ شحال باقي"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("مرحبا بيك عند الحلاق! شنو تحب دير:", reply_markup=reply_markup)
@@ -505,16 +505,16 @@ async def view_all_bookings(update: Update, context: CallbackContext) -> None:
 async def view_waiting_bookings(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) != ADMIN_ID:
         return
-    
+
     try:
         refresh_google_sheets_connection()
         bookings = SHEET.get_all_values()[1:]  # Skip header row
         waiting_bookings = [b for b in bookings if b[5] == "Waiting"]
-        
+
         if not waiting_bookings:
             await update.message.reply_text("ما كاين حتى واحد يستنى 🤷‍♂️")
             return
-        
+
         message = "📋 لي راهم يستناو:\n\n"
         for i, booking in enumerate(waiting_bookings, 1):
             message += (f"{i}. الاسم: {booking[1]}\n"
@@ -523,243 +523,53 @@ async def view_waiting_bookings(update: Update, context: CallbackContext) -> Non
                        f"   الوقت: {booking[4]}\n"
                        f"   التذكرة: {booking[6]}\n"
                        f"{'─' * 20}\n")
-        
+
         await update.message.reply_text(message)
-            
+
     except Exception as e:
         logging.error(f"Error in view_waiting_bookings: {str(e)}")
         await update.message.reply_text("كاين مشكل. عاود حاول.")
 
-async def view_done_bookings(update: Update, context: CallbackContext) -> None:
-    if str(update.message.chat_id) != ADMIN_ID:
-        return
-    
-    try:
-        refresh_google_sheets_connection()
-        bookings = SHEET.get_all_values()[1:]
-        done_bookings = [b for b in bookings if b[5] == "Done"]
-        
-        if not done_bookings:
-            await update.message.reply_text("ما كاين حتى واحد خلص 🤷‍♂️")
-            return
-        
-        message = "✅ لي خلصو:\n\n"
-        for i, booking in enumerate(done_bookings, 1):
-            message += (f"{i}. الاسم: {booking[1]}\n"
-                       f"   التيليفون: {booking[2]}\n"
-                       f"   الحلاق: {booking[3]}\n"
-                       f"   الوقت: {booking[4]}\n"
-                       f"   التذكرة: {booking[6]}\n"
-                       f"{'─' * 20}\n")
-        
-        await update.message.reply_text(message)
-            
-    except Exception as e:
-        logging.error(f"Error in view_done_bookings: {str(e)}")
-        await update.message.reply_text("كاين مشكل. عاود حاول.")
-
-async def view_barber_queue(update: Update, context: CallbackContext, barber_name: str) -> None:
-    if str(update.message.chat_id) != ADMIN_ID:
-        return
-    
-    try:
-        refresh_google_sheets_connection()
-        bookings = SHEET.get_all_values()[1:]
-        barber_bookings = [b for b in bookings if b[3] == barber_name and b[5] == "Waiting"]
-        
-        if not barber_bookings:
-            await update.message.reply_text(f"ما كاين حتى واحد يستنى {barber_name} 🤷‍♂️")
-            return
-        
-        message = f"👤 زبائن {barber_name}:\n\n"
-        for i, booking in enumerate(barber_bookings, 1):
-            message += (f"{i}. الاسم: {booking[1]}\n"
-                       f"   التيليفون: {booking[2]}\n"
-                       f"   الوقت: {booking[4]}\n"
-                       f"   التذكرة: {booking[6]}\n"
-                       f"{'─' * 20}\n")
-        
-        await update.message.reply_text(message)
-            
-    except Exception as e:
-        logging.error(f"Error in view_barber_queue: {str(e)}")
-        await update.message.reply_text("كاين مشكل. عاود حاول.")
-
-async def change_status(update: Update, context: CallbackContext) -> None:
-    if str(update.message.chat_id) != ADMIN_ID:
-        return
-    
-    try:
-        refresh_google_sheets_connection()
-        bookings = SHEET.get_all_values()[1:]
-        waiting_bookings = [b for b in bookings if b[5] == "Waiting"]
-        
-        if not waiting_bookings:
-            await update.message.reply_text("ما كاين حتى واحد يستنى")
-            return
-        
-        keyboard = []
-        for i, booking in enumerate(waiting_bookings):
-            callback_data = f"status_{i}_{booking[0]}"
-            keyboard.append([InlineKeyboardButton(
-                f"{booking[1]} - {booking[3]} (تذكرة {booking[6]})",
-                callback_data=callback_data
-            )])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "اختار شكون خلص:",
-            reply_markup=reply_markup
-        )
-        
-    except Exception as e:
-        logging.error(f"Error in change_status: {str(e)}")
-        await update.message.reply_text("كاين مشكل. عاود حاول.")
-
-async def handle_status_change(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    if str(query.from_user.id) != ADMIN_ID:
-        return
-    
-    try:
-        _, index, user_id = query.data.split('_')
-        refresh_google_sheets_connection()
-        
-        # Find the row with this user_id and "Waiting" status
-        bookings = SHEET.get_all_values()
-        for row_idx, row in enumerate(bookings[1:], 2):  # Start from 2 to account for header
-            if row[0] == user_id and row[5] == "Waiting":
-                SHEET.update_cell(row_idx, 6, "Done")  # Update status to "Done"
-                await query.message.reply_text(f"✅ Marked booking for {row[1]} as Done")
-                return
-                
-        await query.message.reply_text("Booking not found or already completed.")
-        
-    except Exception as e:
-        logging.error(f"Error in handle_status_change: {str(e)}")
-        await query.message.reply_text("Error updating status. Please try again.")
-
-async def delete_booking(update: Update, context: CallbackContext) -> None:
-    user_id = str(update.message.chat_id)
-    
-    if user_id != ADMIN_ID:
-        return
-    
-    try:
-        refresh_google_sheets_connection()
-        bookings = SHEET.get_all_values()[1:]  # Skip header row
-        
-        # Create inline keyboard with all bookings
-        keyboard = []
-        for i, booking in enumerate(bookings):
-            callback_data = f"delete_{i}_{booking[0]}"  # Format: delete_index_userid
-            keyboard.append([InlineKeyboardButton(
-                f"{booking[1]} - {booking[3]} ({booking[5]})",
-                callback_data=callback_data
-            )])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "Select booking to delete:",
-            reply_markup=reply_markup
-        )
-        
-    except Exception as e:
-        logging.error(f"Error in delete_booking: {str(e)}")
-        await update.message.reply_text("Error fetching bookings. Please try again.")
-
-async def handle_delete_booking(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    if str(query.from_user.id) != ADMIN_ID:
-        return
-    
-    try:
-        _, index, user_id = query.data.split('_')
-        refresh_google_sheets_connection()
-        
-        # Find and delete the row with this user_id
-        bookings = SHEET.get_all_values()
-        for row_idx, row in enumerate(bookings[1:], 2):
-            if row[0] == user_id:
-                SHEET.delete_rows(row_idx, row_idx)
-                await query.message.reply_text(f"❌ Deleted booking for {row[1]}")
-                return
-                
-        await query.message.reply_text("Booking not found.")
-        
-    except Exception as e:
-        logging.error(f"Error in handle_delete_booking: {str(e)}")
-        await query.message.reply_text("Error deleting booking. Please try again.")
-
-async def add_booking(update: Update, context: CallbackContext) -> None:
-    user_id = str(update.message.chat_id)
-    
-    if user_id != ADMIN_ID:
-        return
-    
-    # Start the regular booking process but mark it as admin-initiated
-    context.user_data['is_admin_booking'] = True
-    await choose_barber(update, context)
-
-# ---------------- Run the Bot ----------------
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Fix the conversation handler patterns to match Arabic text
+    # Add handlers
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber)
+            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
+            CommandHandler("admin", admin_panel)
         ],
         states={
-            SELECTING_BARBER: [CallbackQueryHandler(barber_selection, pattern="^barber_")],
-            ENTERING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
-            ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)],
-            ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)]
+            SELECTING_BARBER: [
+                CallbackQueryHandler(barber_selection, pattern="^barber_")
+            ],
+            ENTERING_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
+            ],
+            ENTERING_PHONE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
+            ],
+            ADMIN_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
+            ]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    # Fix the message handler patterns to match Arabic text
     app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
-
-    # Fix admin handler patterns to match Arabic text
-    app.add_handler(CommandHandler("admin", admin_panel))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_ALL}$"), view_all_bookings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_DONE}$"), view_done_bookings))
-    app.add_handler(MessageHandler(
-        filters.Regex(f"^{BTN_VIEW_BARBER1}$"),
-        lambda update, context: view_barber_queue(update, context, BARBERS['barber_1'])
-    ))
-    app.add_handler(MessageHandler(
-        filters.Regex(f"^{BTN_VIEW_BARBER2}$"),
-        lambda update, context: view_barber_queue(update, context, BARBERS['barber_2'])
-    ))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHANGE_STATUS}$"), change_status))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_DELETE}$"), delete_booking))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_ADD}$"), add_booking))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), view_all_bookings))
-    
-    # Add callback query handlers
     app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
     # Initialize job queue
-    try:
-        if app.job_queue:
-            app.job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
-            logging.info("Job queue initialized successfully")
-        else:
-            logging.error("Job queue not available. Please install python-telegram-bot[job-queue]")
-    except Exception as e:
-        logging.error(f"Error setting up job queue: {str(e)}")
+    if app.job_queue:
+        app.job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+        logging.info("Job queue initialized successfully")
+    else:
+        logging.error("Job queue not available")
 
     logging.info("Bot is running...")
     app.run_polling()
