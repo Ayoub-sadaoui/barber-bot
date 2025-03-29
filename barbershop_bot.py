@@ -38,7 +38,7 @@ SHEET = client.open("3ami tayeb").sheet1
 # Define conversation states
 SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE, ADMIN_VERIFICATION = range(4)
 ADMIN_ID = "5333075597"  # Replace with your Telegram ID
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'tayeb2020')  # Default to 'KIKO' if not set
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'barber2020')  # Default to 'KIKO' if not set
 
 # Store notification status to prevent duplicate notifications
 NOTIFICATION_CACHE = {}
@@ -48,14 +48,14 @@ APPOINTMENT_DURATION_MINUTES = 10
 
 # Barber configuration
 BARBERS = {
-    "barber_1": "عمي الطيب",
-    "barber_2": "حلاق 1",
-    "barber_3": "حلاق 2"
+    "barber_1": "حلاق 1",
+    "barber_2": "حلاق 2",
+    "barber_3": "حلاق 3"
 }
 
 # Button text constants
 BTN_VIEW_QUEUE = "📋 شوف لاشان"
-BTN_BOOK_APPOINTMENT = "📅 دير رندي فو"
+BTN_BOOK_APPOINTMENT = "📅 دير رنديفو"
 BTN_CHECK_WAIT = "⏳ شحال باقي"
 BTN_VIEW_ALL = "👥 كل الرونديفوات"
 BTN_VIEW_WAITING = "⏳ لي راهم يستناو"
