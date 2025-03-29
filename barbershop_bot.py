@@ -622,7 +622,12 @@ async def handle_delete_booking(update: Update, context: CallbackContext) -> Non
         # Find the booking and delete it
         for i, row in enumerate(bookings[1:], start=2):  # Start from 2 because of 1-based index and header row
             if row[0] == booking_id:
+                # Delete the row
                 SHEET.delete_rows(i)
+                # Clear notification cache for this user
+                for key in list(NOTIFICATION_CACHE.keys()):
+                    if key.startswith(f"{booking_id}_"):
+                        del NOTIFICATION_CACHE[key]
                 await query.message.reply_text(f"✅ تم حذف الحجز بنجاح")
                 return
         
@@ -680,22 +685,34 @@ async def view_barber_bookings(update: Update, context: CallbackContext) -> None
             await update.message.reply_text("❌ لم يتم تحديد الحلاق")
             return
 
+        # Filter bookings for the selected barber
         barber_bookings = [b for b in bookings if b[3] == barber_name]
         
         if not barber_bookings:
             await update.message.reply_text(f"ما كاين حتى حجز مع {barber_name} 🤷‍♂️")
             return
 
-        message = f"📋 حجوزات {barber_name}:\n\n"
+        # Send each booking as a separate message with action buttons
         for i, booking in enumerate(barber_bookings, 1):
             status_emoji = "⏳" if booking[5] == "Waiting" else "✅"
-            message += (f"{i}. {status_emoji} {booking[1]}\n"
-                       f"   التيليفون: {booking[2]}\n"
-                       f"   الوقت: {booking[4]}\n"
-                       f"   التذكرة: {booking[6]}\n"
-                       f"{'─' * 20}\n")
-
-        await update.message.reply_text(message)
+            message = (f"{i}. {status_emoji} {booking[1]}\n"
+                      f"   التيليفون: {booking[2]}\n"
+                      f"   الوقت: {booking[4]}\n"
+                      f"   التذكرة: {booking[6]}\n"
+                      f"{'─' * 20}\n")
+            
+            # Add action buttons for waiting bookings
+            if booking[5] == "Waiting":
+                keyboard = [
+                    [
+                        InlineKeyboardButton("✅ خلاص", callback_data=f"status_{booking[0]}"),
+                        InlineKeyboardButton("❌ امسح", callback_data=f"delete_{booking[0]}")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(message, reply_markup=reply_markup)
+            else:
+                await update.message.reply_text(message)
 
     except Exception as e:
         logging.error(f"Error in view_barber_bookings: {str(e)}")
