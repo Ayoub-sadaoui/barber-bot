@@ -18,7 +18,20 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 
 # ---------------- Google Sheets Authentication ----------------
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-CREDS = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('GOOGLE_CREDS_PATH'), SCOPE)
+
+# Get and validate environment variables
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+GOOGLE_CREDS_JSON = os.getenv('GOOGLE_CREDENTIALS')
+
+if not TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN environment variable not found")
+if not GOOGLE_CREDS_JSON:
+    raise ValueError("GOOGLE_CREDENTIALS environment variable not found")
+
+# Parse the Google credentials JSON string into a dictionary
+CREDS_DICT = json.loads(GOOGLE_CREDS_JSON)
+CREDS = ServiceAccountCredentials.from_json_keyfile_dict(CREDS_DICT, SCOPE)
+
 client = gspread.authorize(CREDS)
 SHEET = client.open("3ami tayeb").sheet1
 
@@ -679,9 +692,7 @@ async def add_booking(update: Update, context: CallbackContext) -> None:
 
 # ---------------- Run the Bot ----------------
 def main():
-    TOKEN = os.getenv('TELEGRAM_TOKEN')
-    
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
     
     # Fix the conversation handler patterns to match Arabic text
     conv_handler = ConversationHandler(
