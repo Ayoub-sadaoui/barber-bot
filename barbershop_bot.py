@@ -117,18 +117,14 @@ async def check_and_notify_users(context: CallbackContext):
         # Get all waiting appointments
         waiting_appointments = [row for row in bookings[1:] if row[5] == "Waiting"]
         
-        # Clear old notifications for users no longer in queue
-        current_user_ids = [appointment[0] for appointment in waiting_appointments]
-        NOTIFICATION_CACHE.clear()  # Clear old notifications
-        
         for position, appointment in enumerate(waiting_appointments):
             user_id = appointment[0]
             user_name = appointment[1]
             barber = appointment[3]
             
             try:
+                # Send turn notification to first in line
                 if position == 0 and not was_recently_notified(user_id, "turn"):
-                    # Send turn notification to first in line
                     await context.bot.send_message(
                         chat_id=int(user_id),
                         text=f"🎉 {user_name}، دورك توا!\n"
@@ -138,8 +134,8 @@ async def check_and_notify_users(context: CallbackContext):
                     save_notification_status(user_id, "turn")
                     logging.info(f"Sent turn notification to user {user_id}")
                 
+                # Send 15-minute warning to next in line
                 elif position == 1 and not was_recently_notified(user_id, "warning"):
-                    # Send 15-minute warning to next in line
                     await context.bot.send_message(
                         chat_id=int(user_id),
                         text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 15 دقيقة.\n"
@@ -586,6 +582,75 @@ async def handle_delete_booking(update: Update, context: CallbackContext) -> Non
         logging.error(f"Error in handle_delete_booking: {str(e)}")
         await query.message.reply_text("❌ حدث خطأ أثناء حذف الحجز")
 
+async def view_done_bookings(update: Update, context: CallbackContext) -> None:
+    """View all completed bookings"""
+    if str(update.message.chat_id) != ADMIN_ID:
+        return
+
+    try:
+        refresh_google_sheets_connection()
+        bookings = SHEET.get_all_values()[1:]  # Skip header row
+        done_bookings = [b for b in bookings if b[5] == "Done"]
+
+        if not done_bookings:
+            await update.message.reply_text("ما كاين حتى حجز مكمل 🤷‍♂️")
+            return
+
+        message = "📋 الحجوزات المكملة:\n\n"
+        for i, booking in enumerate(done_bookings, 1):
+            message += (f"{i}. الاسم: {booking[1]}\n"
+                       f"   التيليفون: {booking[2]}\n"
+                       f"   الحلاق: {booking[3]}\n"
+                       f"   الوقت: {booking[4]}\n"
+                       f"   التذكرة: {booking[6]}\n"
+                       f"{'─' * 20}\n")
+
+        await update.message.reply_text(message)
+
+    except Exception as e:
+        logging.error(f"Error in view_done_bookings: {str(e)}")
+        await update.message.reply_text("كاين مشكل. عاود حاول.")
+
+async def view_barber_bookings(update: Update, context: CallbackContext) -> None:
+    """View bookings for a specific barber"""
+    if str(update.message.chat_id) != ADMIN_ID:
+        return
+
+    try:
+        refresh_google_sheets_connection()
+        bookings = SHEET.get_all_values()[1:]  # Skip header row
+        
+        # Determine which barber's bookings to show
+        message_text = update.message.text
+        if BTN_VIEW_BARBER1 in message_text:
+            barber_name = BARBERS['barber_1']
+        elif BTN_VIEW_BARBER2 in message_text:
+            barber_name = BARBERS['barber_2']
+        else:
+            await update.message.reply_text("❌ لم يتم تحديد الحلاق")
+            return
+
+        barber_bookings = [b for b in bookings if b[3] == barber_name]
+        
+        if not barber_bookings:
+            await update.message.reply_text(f"ما كاين حتى حجز مع {barber_name} 🤷‍♂️")
+            return
+
+        message = f"📋 حجوزات {barber_name}:\n\n"
+        for i, booking in enumerate(barber_bookings, 1):
+            status_emoji = "⏳" if booking[5] == "Waiting" else "✅"
+            message += (f"{i}. {status_emoji} {booking[1]}\n"
+                       f"   التيليفون: {booking[2]}\n"
+                       f"   الوقت: {booking[4]}\n"
+                       f"   التذكرة: {booking[6]}\n"
+                       f"{'─' * 20}\n")
+
+        await update.message.reply_text(message)
+
+    except Exception as e:
+        logging.error(f"Error in view_barber_bookings: {str(e)}")
+        await update.message.reply_text("كاين مشكل. عاود حاول.")
+
 def main():
     try:
         app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -619,12 +684,15 @@ def main():
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_DONE}$"), view_done_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
         app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
-        # Initialize job queue
+        # Initialize job queue with more frequent checks
         if app.job_queue:
-            app.job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=5)  # Check every 30 seconds
             logging.info("Job queue initialized successfully")
         else:
             logging.error("Job queue not available")
