@@ -1,0 +1,1 @@
+worker: python barbershop_bot.py 
