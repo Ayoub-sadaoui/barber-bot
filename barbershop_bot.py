@@ -530,49 +530,111 @@ async def view_waiting_bookings(update: Update, context: CallbackContext) -> Non
         logging.error(f"Error in view_waiting_bookings: {str(e)}")
         await update.message.reply_text("كاين مشكل. عاود حاول.")
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+async def handle_status_change(update: Update, context: CallbackContext) -> None:
+    """Handle changing the status of a booking"""
+    query = update.callback_query
+    await query.answer()
     
-    # Add handlers
-    conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-            CommandHandler("admin", admin_panel)
-        ],
-        states={
-            SELECTING_BARBER: [
-                CallbackQueryHandler(barber_selection, pattern="^barber_")
-            ],
-            ENTERING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
-            ],
-            ENTERING_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
-            ],
-            ADMIN_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
-            ]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    )
+    if str(query.from_user.id) != ADMIN_ID:
+        await query.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
+        return
+    
+    try:
+        # Extract booking ID from callback data
+        booking_id = query.data.split('_')[1]
+        refresh_google_sheets_connection()
+        bookings = SHEET.get_all_values()
+        
+        # Find the booking and update its status
+        for i, row in enumerate(bookings[1:], start=2):  # Start from 2 because of 1-based index and header row
+            if row[0] == booking_id:
+                SHEET.update_cell(i, 6, "Done")  # Update status column
+                await query.message.reply_text(f"✅ تم تغيير حالة الحجز إلى 'تم'")
+                return
+        
+        await query.message.reply_text("❌ لم يتم العثور على الحجز")
+        
+    except Exception as e:
+        logging.error(f"Error in handle_status_change: {str(e)}")
+        await query.message.reply_text("❌ حدث خطأ أثناء تغيير حالة الحجز")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv_handler)
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
-    app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
-    app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+async def handle_delete_booking(update: Update, context: CallbackContext) -> None:
+    """Handle deleting a booking"""
+    query = update.callback_query
+    await query.answer()
+    
+    if str(query.from_user.id) != ADMIN_ID:
+        await query.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
+        return
+    
+    try:
+        # Extract booking ID from callback data
+        booking_id = query.data.split('_')[1]
+        refresh_google_sheets_connection()
+        bookings = SHEET.get_all_values()
+        
+        # Find the booking and delete it
+        for i, row in enumerate(bookings[1:], start=2):  # Start from 2 because of 1-based index and header row
+            if row[0] == booking_id:
+                SHEET.delete_rows(i)
+                await query.message.reply_text(f"✅ تم حذف الحجز بنجاح")
+                return
+        
+        await query.message.reply_text("❌ لم يتم العثور على الحجز")
+        
+    except Exception as e:
+        logging.error(f"Error in handle_delete_booking: {str(e)}")
+        await query.message.reply_text("❌ حدث خطأ أثناء حذف الحجز")
 
-    # Initialize job queue
-    if app.job_queue:
-        app.job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
-        logging.info("Job queue initialized successfully")
-    else:
-        logging.error("Job queue not available")
+def main():
+    try:
+        app = Application.builder().token(TELEGRAM_TOKEN).build()
+        
+        # Add handlers
+        conv_handler = ConversationHandler(
+            entry_points=[
+                MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
+                CommandHandler("admin", admin_panel)
+            ],
+            states={
+                SELECTING_BARBER: [
+                    CallbackQueryHandler(barber_selection, pattern="^barber_")
+                ],
+                ENTERING_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
+                ],
+                ENTERING_PHONE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
+                ],
+                ADMIN_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
 
-    logging.info("Bot is running...")
-    app.run_polling()
+        # Add all handlers
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(conv_handler)
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
+        app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
+        app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
+        app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+
+        # Initialize job queue
+        if app.job_queue:
+            app.job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+            logging.info("Job queue initialized successfully")
+        else:
+            logging.error("Job queue not available")
+
+        logging.info("Bot is starting...")
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+        
+    except Exception as e:
+        logging.error(f"Error starting bot: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     main()
