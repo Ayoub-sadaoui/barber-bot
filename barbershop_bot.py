@@ -221,7 +221,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     return ConversationHandler.END
 
 async def choose_barber(update: Update, context: CallbackContext) -> int:
-    logging.info("Booking button clicked.")
+    logging.info(f"Booking button clicked. Message text: {update.message.text}")
     user_id = update.message.chat_id
     
     if has_active_appointment(user_id):
