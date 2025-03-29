@@ -221,6 +221,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     return ConversationHandler.END
 
 async def choose_barber(update: Update, context: CallbackContext) -> int:
+    logging.info("Booking button clicked.")
     user_id = update.message.chat_id
     
     if has_active_appointment(user_id):
@@ -711,14 +712,13 @@ def main():
     # Fix the conversation handler patterns to match Arabic text
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-            CommandHandler("admin", admin_panel)  # Entry point for admin
+            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber)
         ],
         states={
             SELECTING_BARBER: [CallbackQueryHandler(barber_selection, pattern="^barber_")],
             ENTERING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)],
-            ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)]  # New state for password verification
+            ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
