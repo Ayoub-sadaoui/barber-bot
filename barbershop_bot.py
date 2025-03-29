@@ -117,6 +117,13 @@ async def check_and_notify_users(context: CallbackContext):
         # Get all waiting appointments
         waiting_appointments = [row for row in bookings[1:] if row[5] == "Waiting"]
         
+        # Clear old notifications for users no longer in queue
+        current_user_ids = [appointment[0] for appointment in waiting_appointments]
+        for key in list(NOTIFICATION_CACHE.keys()):
+            user_id = key.split('_')[0]
+            if user_id not in current_user_ids:
+                del NOTIFICATION_CACHE[key]
+        
         for position, appointment in enumerate(waiting_appointments):
             user_id = appointment[0]
             user_name = appointment[1]
@@ -772,7 +779,10 @@ def main():
 
         # Initialize job queue with more frequent checks
         if app.job_queue:
-            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=10)  # Check every minute
+            # Clear any existing jobs
+            app.job_queue.remove_all_jobs()
+            # Add the notification job
+            app.job_queue.run_repeating(check_and_notify_users, interval=30, first=5)
             logging.info("Job queue initialized successfully")
         else:
             logging.error("Job queue not available")
