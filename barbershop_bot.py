@@ -7,13 +7,18 @@ from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKe
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler, ConversationHandler
 from datetime import datetime, timedelta
 import json
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ---------------- Setup Logging ----------------
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 # ---------------- Google Sheets Authentication ----------------
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-CREDS = ServiceAccountCredentials.from_json_keyfile_name("ami-tayeb-0b20862e154a.json", SCOPE)
+CREDS = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('GOOGLE_CREDS_PATH'), SCOPE)
 client = gspread.authorize(CREDS)
 SHEET = client.open("3ami tayeb").sheet1
 
@@ -674,7 +679,7 @@ async def add_booking(update: Update, context: CallbackContext) -> None:
 
 # ---------------- Run the Bot ----------------
 def main():
-    TOKEN = "7706674172:AAFPAdbWFp6aV8IN6_rJbbeGejUfLzsesdM"
+    TOKEN = os.getenv('TELEGRAM_TOKEN')
     
     app = Application.builder().token(TOKEN).build()
     

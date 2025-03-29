@@ -1,8 +1,0 @@
-# Credentials
-ami-tayeb-0b20862e154a.json
-*.json
-.env
-
-# Python
-__pycache__/
-*.pyc 
