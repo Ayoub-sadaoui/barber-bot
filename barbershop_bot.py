@@ -50,7 +50,8 @@ APPOINTMENT_DURATION_MINUTES = 10
 # Barber configuration
 BARBERS = {
     "barber_1": "عمي الطيب",
-    "barber_2": "كمال"
+    "barber_2": "حلاق 1",
+    "barber_3": "حلاق 2"
 }
 
 # Button text constants
@@ -245,7 +246,7 @@ async def barber_selection(update: Update, context: CallbackContext) -> int:
 
 async def handle_name(update: Update, context: CallbackContext) -> int:
     user_name = update.message.text
-    
+
     if not is_valid_name(user_name):
         await update.message.reply_text(
             "❌ الاسم ماشي صحيح. من فضلك دخل اسم صحيح:\n"
@@ -284,14 +285,14 @@ async def handle_phone(update: Update, context: CallbackContext) -> int:
     
     try:
         refresh_google_sheets_connection()
-        bookings = SHEET.get_all_values()
+    bookings = SHEET.get_all_values()
         waiting_appointments = [row for row in bookings[1:] if row[5] == "Waiting"]
         position = len(waiting_appointments)  # New position will be at the end
-        
+
         # Generate a ticket number
         ticket_number = generate_ticket_number()
-        
-        # Add the new booking to Google Sheets
+
+    # Add the new booking to Google Sheets
         SHEET.append_row([user_id, user_name, phone, selected_barber, time.strftime("%Y-%m-%d %H:%M:%S"), "Waiting", ticket_number])
         
         # Send confirmation message with position info
@@ -330,7 +331,7 @@ async def check_queue(update: Update, context: CallbackContext) -> None:
     try:
         refresh_google_sheets_connection()
         user_id = str(update.message.chat_id)
-        bookings = SHEET.get_all_values()
+    bookings = SHEET.get_all_values()
         
         waiting_appointments = [row for row in bookings[1:] if row[5] == "Waiting"]
         user_position = next((i for i, row in enumerate(waiting_appointments) if row[0] == user_id), -1)
@@ -613,7 +614,7 @@ async def handle_status_change(update: Update, context: CallbackContext) -> None
         refresh_google_sheets_connection()
         
         # Find the row with this user_id and "Waiting" status
-        bookings = SHEET.get_all_values()
+    bookings = SHEET.get_all_values()
         for row_idx, row in enumerate(bookings[1:], 2):  # Start from 2 to account for header
             if row[0] == user_id and row[5] == "Waiting":
                 SHEET.update_cell(row_idx, 6, "Done")  # Update status to "Done"
@@ -645,7 +646,7 @@ async def delete_booking(update: Update, context: CallbackContext) -> None:
                 callback_data=callback_data
             )])
         
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "Select booking to delete:",
             reply_markup=reply_markup
