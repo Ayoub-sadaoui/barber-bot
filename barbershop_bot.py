@@ -55,7 +55,7 @@ BARBERS = {
 
 # Button text constants
 BTN_VIEW_QUEUE = "📋 شوف لاشان"
-BTN_BOOK_APPOINTMENT = "📅 دير رندي فو"
+BTN_BOOK_APPOINTMENT = "📅 دير رنديفو"
 BTN_CHECK_WAIT = "⏳ شحال باقي"
 BTN_VIEW_ALL = "👥 كل الرونديفوات"
 BTN_VIEW_WAITING = "⏳ لي راهم يستناو"
