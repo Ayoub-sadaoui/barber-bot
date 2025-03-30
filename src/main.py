@@ -22,7 +22,8 @@ from src.handlers.booking_handlers import (
 from src.handlers.admin_handlers import (
     admin_panel, verify_admin_password, view_waiting_bookings,
     view_done_bookings, view_barber_bookings, handle_status_change,
-    handle_delete_booking, handle_refresh, handle_call_customer
+    handle_delete_booking, handle_refresh, handle_call_customer,
+    shop_admin_panel
 )
 from src.handlers.super_admin_handlers import (
     super_admin_panel, start_adding_shop, handle_shop_name,
