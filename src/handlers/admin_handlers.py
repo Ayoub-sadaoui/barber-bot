@@ -1,13 +1,18 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from telegram.ext import ContextTypes as CallbackContext
-from src.config.config import ADMIN_ID, ADMIN_PASSWORD, BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1, BTN_VIEW_BARBER2, BTN_ADD, BTN_REFRESH
+from telegram.ext import ContextTypes as CallbackContext, ConversationHandler
+from src.config.config import (
+    ADMIN_ID, ADMIN_PASSWORD, BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1, BTN_VIEW_BARBER2,
+    BTN_ADD, BTN_REFRESH, ADMIN_VERIFICATION, BTN_CHANGE_STATUS, BTN_DELETE
+)
 from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
+from src.services.barber_shop_service import BarberShopService
 
 # Initialize services
 sheets_service = SheetsService()
 notification_service = NotificationService()
+barber_shop_service = BarberShopService()
 
 async def admin_panel(update: Update, context: CallbackContext) -> int:
     """Display admin panel and request password"""
@@ -294,4 +299,156 @@ async def handle_refresh(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("🔄 تم تحديث الاتصال بنجاح!")
     except Exception as e:
         logging.error(f"Error in handle_refresh: {str(e)}")
-        await update.message.reply_text("❌ حدث خطأ أثناء تحديث الاتصال") 
+        await update.message.reply_text("❌ حدث خطأ أثناء تحديث الاتصال")
+
+async def shop_admin_panel(update: Update, context: CallbackContext):
+    """Handle the /shopadmin command"""
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("الرجاء استخدام الأمر بالشكل الصحيح:\n/shopadmin <اسم المحل> <كلمة المرور>")
+        return ConversationHandler.END
+    
+    shop_name = context.args[0]
+    password = context.args[1]
+    
+    if barber_shop_service.verify_shop_admin(shop_name, password):
+        context.user_data['current_shop'] = shop_name
+        context.user_data['is_shop_admin'] = True
+        
+        keyboard = [
+            ["📋 شوف اللايحة ديال الانتظار", "✅ شوف المكملين"],
+            ["🔄 تحديث", "➕ زيد موعد"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            f"مرحباً بك في لوحة تحكم محل {shop_name}!\nاختر ما تريد القيام به:",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text("❌ كلمة المرور غير صحيحة أو المحل غير موجود.")
+    
+    return ConversationHandler.END
+
+async def view_waiting_bookings(update: Update, context: CallbackContext):
+    """View waiting bookings for the current shop"""
+    if not context.user_data.get('is_shop_admin') or not context.user_data.get('current_shop'):
+        await update.message.reply_text("الرجاء تسجيل الدخول إلى لوحة التحكم أولاً.")
+        return ConversationHandler.END
+    
+    shop_name = context.user_data['current_shop']
+    shop = barber_shop_service.get_shop(shop_name)
+    if not shop:
+        await update.message.reply_text("❌ حدث خطأ في الوصول إلى بيانات المحل.")
+        return ConversationHandler.END
+    
+    # Get waiting bookings from the shop's Google Sheet
+    waiting_bookings = sheets_service.get_waiting_bookings(shop['sheet_id'])
+    
+    if not waiting_bookings:
+        await update.message.reply_text("لا يوجد مواعيد في الانتظار حالياً.")
+        return ConversationHandler.END
+    
+    message = "📋 قائمة المواعيد في الانتظار:\n\n"
+    for booking in waiting_bookings:
+        message += (
+            f"👤 الاسم: {booking[1]}\n"
+            f"📱 الهاتف: {booking[2]}\n"
+            f"💇‍♂️ الحلاق: {booking[3]}\n"
+            f"🎫 رقم التذكرة: {booking[4]}\n"
+            f"-------------------\n"
+        )
+    
+    await update.message.reply_text(message)
+    return ConversationHandler.END
+
+async def view_done_bookings(update: Update, context: CallbackContext):
+    """View completed bookings for the current shop"""
+    if not context.user_data.get('is_shop_admin') or not context.user_data.get('current_shop'):
+        await update.message.reply_text("الرجاء تسجيل الدخول إلى لوحة التحكم أولاً.")
+        return ConversationHandler.END
+    
+    shop_name = context.user_data['current_shop']
+    shop = barber_shop_service.get_shop(shop_name)
+    if not shop:
+        await update.message.reply_text("❌ حدث خطأ في الوصول إلى بيانات المحل.")
+        return ConversationHandler.END
+    
+    # Get completed bookings from the shop's Google Sheet
+    done_bookings = sheets_service.get_done_bookings(shop['sheet_id'])
+    
+    if not done_bookings:
+        await update.message.reply_text("لا يوجد مواعيد مكتملة حالياً.")
+        return ConversationHandler.END
+    
+    message = "✅ قائمة المواعيد المكتملة:\n\n"
+    for booking in done_bookings:
+        message += (
+            f"👤 الاسم: {booking[1]}\n"
+            f"📱 الهاتف: {booking[2]}\n"
+            f"💇‍♂️ الحلاق: {booking[3]}\n"
+            f"🎫 رقم التذكرة: {booking[4]}\n"
+            f"-------------------\n"
+        )
+    
+    await update.message.reply_text(message)
+    return ConversationHandler.END
+
+async def handle_status_change(update: Update, context: CallbackContext):
+    """Handle changing the status of a booking"""
+    if not context.user_data.get('is_shop_admin') or not context.user_data.get('current_shop'):
+        await update.callback_query.message.reply_text("الرجاء تسجيل الدخول إلى لوحة التحكم أولاً.")
+        return ConversationHandler.END
+    
+    query = update.callback_query
+    await query.answer()
+    
+    shop_name = context.user_data['current_shop']
+    shop = barber_shop_service.get_shop(shop_name)
+    if not shop:
+        await query.message.reply_text("❌ حدث خطأ في الوصول إلى بيانات المحل.")
+        return ConversationHandler.END
+    
+    # Extract booking ID from callback data
+    booking_id = query.data.split('_')[1]
+    
+    # Update the booking status in the shop's Google Sheet
+    if sheets_service.update_booking_status(shop['sheet_id'], booking_id, "Done"):
+        await query.message.reply_text("✅ تم تحديث حالة الموعد بنجاح!")
+    else:
+        await query.message.reply_text("❌ حدث خطأ أثناء تحديث حالة الموعد.")
+    
+    return ConversationHandler.END
+
+async def handle_delete_booking(update: Update, context: CallbackContext):
+    """Handle deleting a booking"""
+    if not context.user_data.get('is_shop_admin') or not context.user_data.get('current_shop'):
+        await update.callback_query.message.reply_text("الرجاء تسجيل الدخول إلى لوحة التحكم أولاً.")
+        return ConversationHandler.END
+    
+    query = update.callback_query
+    await query.answer()
+    
+    shop_name = context.user_data['current_shop']
+    shop = barber_shop_service.get_shop(shop_name)
+    if not shop:
+        await query.message.reply_text("❌ حدث خطأ في الوصول إلى بيانات المحل.")
+        return ConversationHandler.END
+    
+    # Extract booking ID from callback data
+    booking_id = query.data.split('_')[1]
+    
+    # Delete the booking from the shop's Google Sheet
+    if sheets_service.delete_booking(shop['sheet_id'], booking_id):
+        await query.message.reply_text("✅ تم حذف الموعد بنجاح!")
+    else:
+        await query.message.reply_text("❌ حدث خطأ أثناء حذف الموعد.")
+    
+    return ConversationHandler.END
+
+async def handle_refresh(update: Update, context: CallbackContext):
+    """Handle refreshing the view"""
+    if not context.user_data.get('is_shop_admin') or not context.user_data.get('current_shop'):
+        await update.message.reply_text("الرجاء تسجيل الدخول إلى لوحة التحكم أولاً.")
+        return ConversationHandler.END
+    
+    await update.message.reply_text("🔄 جاري تحديث البيانات...")
+    return ConversationHandler.END 

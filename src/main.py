@@ -144,6 +144,8 @@ def main():
 
         # Add all handlers
         app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("shopadmin", shop_admin_panel))
+        app.add_handler(CallbackQueryHandler(handle_shop_selection, pattern="^select_shop_"))
         app.add_handler(conv_handler)
         app.add_handler(super_admin_conv_handler)
         
@@ -165,6 +167,7 @@ def main():
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
         app.add_handler(CallbackQueryHandler(handle_call_customer, pattern="^call_"))
         app.add_handler(CallbackQueryHandler(handle_shop_deletion, pattern="^delete_shop_"))
+        app.add_handler(CallbackQueryHandler(share_shop_link, pattern="^share_shop_"))
 
         # Initialize job queue for notifications
         try:

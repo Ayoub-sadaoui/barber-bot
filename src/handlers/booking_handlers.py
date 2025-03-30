@@ -1,12 +1,15 @@
 import logging
 import re
 from datetime import datetime
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes as CallbackContext, ConversationHandler
 from src.config.config import (
     SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
     ADMIN_ID, BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES,
-    SUPER_ADMIN_PASSWORD
+    SUPER_ADMIN_PASSWORD, ADMIN_VERIFICATION, BTN_VIEW_QUEUE,
+    BTN_CHECK_WAIT, BTN_VIEW_WAITING, BTN_VIEW_DONE,
+    BTN_VIEW_BARBER1, BTN_VIEW_BARBER2, BTN_CHANGE_STATUS,
+    BTN_DELETE, BTN_ADD, BTN_REFRESH
 )
 from src.utils.validators import is_valid_name, is_valid_phone
 from src.utils.formatters import format_wait_time, get_estimated_completion_time
@@ -20,31 +23,97 @@ import os
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from typing import Dict
+from src.services.barber_shop_service import BarberShopService
 
 sheets_service = SheetsService()
 notification_service = NotificationService()
+barber_shop_service = BarberShopService()
 
 filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
-async def choose_barber(update: Update, context: CallbackContext) -> int:
-    """Handle the initial booking request and check if user already has an appointment"""
-    user_id = str(update.message.chat_id)
-    
-    # Check if user is a customer and already has an active appointment
-    if not context.user_data.get('is_admin', False) and sheets_service.has_active_appointment(user_id):
-        # Check if the appointment is still waiting
-        if sheets_service.get_appointment_status(user_id) == "Waiting":
-            await update.message.reply_text("❌ عندك رنديفو موجود. لازم تكملو قبل ما دير واحد جديد.")
-            return ConversationHandler.END
+logger = logging.getLogger(__name__)
 
-    # Create keyboard with barber options
-    keyboard = [
-        [InlineKeyboardButton(BARBERS['barber_1'], callback_data="barber_1")],
-        [InlineKeyboardButton(BARBERS['barber_2'], callback_data="barber_2")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+async def start(update: Update, context: CallbackContext):
+    """Handle the /start command"""
+    # Check if this is a shop-specific start
+    if context.args and context.args[0].startswith('shop_'):
+        shop_name = context.args[0].replace('shop_', '')
+        shop = barber_shop_service.get_shop(shop_name)
+        if shop:
+            context.user_data['current_shop'] = shop_name
+            keyboard = [
+                ["📅 دير رنديفو", "📋 شوف لاشان"],
+                ["⏳ شحال باقي"]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text(
+                f"مرحباً بيك عند {shop_name}! اختر ما تريد القيام به:",
+                reply_markup=reply_markup
+            )
+            return ConversationHandler.END
     
-    await update.message.reply_text("💇‍♂️ اختر الحلاق:", reply_markup=reply_markup)
+    # Show list of available shops
+    shops = barber_shop_service.get_all_shops()
+    if not shops:
+        await update.message.reply_text("عذراً، لا توجد محلات متاحة حالياً.")
+        return ConversationHandler.END
+    
+    message = "👋 مرحباً بك! اختر المحل الذي تريد الحجز فيه:\n\n"
+    keyboard = []
+    for shop in shops:
+        keyboard.append([InlineKeyboardButton(shop, callback_data=f"select_shop_{shop}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
+    return ConversationHandler.END
+
+async def handle_shop_selection(update: Update, context: CallbackContext):
+    """Handle shop selection from the list"""
+    query = update.callback_query
+    await query.answer()
+    
+    shop_name = query.data.replace("select_shop_", "")
+    shop = barber_shop_service.get_shop(shop_name)
+    
+    if shop:
+        context.user_data['current_shop'] = shop_name
+        keyboard = [
+            ["📅 دير رنديفو", "📋 شوف لاشان"],
+            ["⏳ شحال باقي"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await query.message.reply_text(
+            f"تم اختيار محل {shop_name}. اختر ما تريد القيام به:",
+            reply_markup=reply_markup
+        )
+    else:
+        await query.message.reply_text("عذراً، حدث خطأ في اختيار المحل. حاول مرة أخرى.")
+    
+    return ConversationHandler.END
+
+async def choose_barber(update: Update, context: CallbackContext) -> int:
+    """Handle the booking appointment button"""
+    if 'current_shop' not in context.user_data:
+        await update.message.reply_text("الرجاء اختيار محل أولاً.")
+        return ConversationHandler.END
+    
+    shop_name = context.user_data['current_shop']
+    shop = barber_shop_service.get_shop(shop_name)
+    if not shop:
+        await update.message.reply_text("عذراً، حدث خطأ في اختيار المحل. حاول مرة أخرى.")
+        return ConversationHandler.END
+    
+    barbers = shop.get('barbers', {})
+    if not barbers:
+        await update.message.reply_text("عذراً، لا يوجد حلاقين متاحين حالياً.")
+        return ConversationHandler.END
+    
+    keyboard = []
+    for barber_id, barber_name in barbers.items():
+        keyboard.append([InlineKeyboardButton(barber_name, callback_data=f"barber_{barber_id}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("اختر الحلاق:", reply_markup=reply_markup)
     return SELECTING_BARBER
 
 async def barber_selection(update: Update, context: CallbackContext) -> int:
