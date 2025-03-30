@@ -1,1 +1,1 @@
-worker: python3 src/main.py 
+web: python barbershop_bot.py 
