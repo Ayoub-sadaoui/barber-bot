@@ -39,17 +39,20 @@ async def cancel(update: Update, context):
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
     return ConversationHandler.END
 
-async def check_and_notify_users(context):
+async def check_and_notify_users(context: CallbackContext) -> None:
     """Periodically check queue and notify users of their turn"""
     try:
         waiting_appointments = sheets_service.get_waiting_bookings()
-        await notification_service.send_notifications(context, waiting_appointments)
+        if waiting_appointments:
+            await notification_service.send_notifications(context, waiting_appointments)
+            logging.info(f"Successfully processed notifications for {len(waiting_appointments)} users")
     except Exception as e:
         logging.error(f"Error in check_and_notify_users: {str(e)}")
 
 def main():
     """Main function to run the bot"""
     try:
+        # Initialize the application with persistence
         app = Application.builder().token(TELEGRAM_TOKEN).build()
         
         # Add conversation handler for booking process
@@ -90,10 +93,13 @@ def main():
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
         # Initialize job queue for notifications
-        if app.job_queue:
-            app.job_queue.remove_all_jobs()
-            app.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
-            logging.info("Job queue initialized successfully")
+        job_queue = app.job_queue
+        if job_queue:
+            # Remove any existing jobs
+            job_queue.remove_all_jobs()
+            # Add notification job to run every minute
+            job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+            logging.info("Notification job queue initialized successfully")
         else:
             logging.error("Job queue not available")
 

@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import CallbackContext
+from telegram.ext import CallbackContext, ConversationHandler
 from src.config.config import (
     ADMIN_ID, ADMIN_PASSWORD, ADMIN_VERIFICATION,
     BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1,
@@ -30,6 +30,9 @@ async def verify_admin_password(update: Update, context: CallbackContext) -> int
     entered_password = update.message.text.strip()
     
     if entered_password == ADMIN_PASSWORD:
+        # Store admin state in user_data
+        context.user_data['is_admin'] = True
+        
         keyboard = [
             [BTN_VIEW_WAITING, BTN_VIEW_DONE],
             [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
@@ -49,7 +52,8 @@ async def verify_admin_password(update: Update, context: CallbackContext) -> int
 
 async def view_waiting_bookings(update: Update, context: CallbackContext) -> None:
     """View all waiting bookings"""
-    if str(update.message.chat_id) != ADMIN_ID:
+    if str(update.message.chat_id) != ADMIN_ID or not context.user_data.get('is_admin'):
+        await update.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
         return
 
     try:
