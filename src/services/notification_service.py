@@ -1,7 +1,9 @@
 from datetime import datetime
 import logging
-from telegram import Bot
+from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ConversationHandler, CallbackContext
 from src.config.config import APPOINTMENT_DURATION_MINUTES
+from src.services.barber_shop_service import BarberShopService
 
 class NotificationService:
     def __init__(self):
@@ -175,4 +177,35 @@ class NotificationService:
                     logging.info(f"Skipping {notification_type} notification for user {user_id} (recently notified)")
 
         except Exception as e:
-            logging.error(f"Error sending position notification: {str(e)}") 
+            logging.error(f"Error sending position notification: {str(e)}")
+
+# Initialize services
+barber_shop_service = BarberShopService()
+
+async def view_shops(update: Update, context: CallbackContext):
+    """View all barber shops and provide options to share links"""
+    shops = barber_shop_service.get_all_shops()
+    if not shops:
+        await update.message.reply_text("لا توجد محلات حالياً.")
+        return ConversationHandler.END
+    
+    message = "المحلات المتوفرة:\n\n"
+    keyboard = []
+    for shop in shops:
+        message += f"• {shop}\n"
+        keyboard.append([InlineKeyboardButton(f"Share {shop}", callback_data=f"share_shop_{shop}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
+    return ConversationHandler.END
+
+async def share_shop_link(update: Update, context: CallbackContext):
+    """Share the link for a specific shop"""
+    query = update.callback_query
+    await query.answer()
+    
+    shop_name = query.data.replace("share_shop_", "")
+    # Generate a link or command for booking at this shop
+    booking_link = f"/book_{shop_name}"
+    await query.message.reply_text(f"Use this link to book at {shop_name}: {booking_link}")
+    return ConversationHandler.END 
