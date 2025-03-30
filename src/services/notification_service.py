@@ -1,10 +1,13 @@
 from datetime import datetime
 import logging
+from telegram import Bot
 from src.config.config import APPOINTMENT_DURATION_MINUTES
 
 class NotificationService:
     def __init__(self):
         self.notification_cache = {}
+        self.notified_users = set()
+        self.logger = logging.getLogger(__name__)
         logging.info("NotificationService initialized")
 
     def save_notification_status(self, user_id: str, notification_type: str):
@@ -41,35 +44,51 @@ class NotificationService:
             logging.error(f"Error clearing notifications: {str(e)}")
 
     async def send_notifications(self, context, waiting_appointments):
-        """Send notifications to users based on their position in queue"""
-        if not waiting_appointments:
-            logging.info("No waiting appointments to process")
-            return
-
+        """Send notifications to users whose turn is coming up"""
         try:
-            logging.info(f"Processing notifications for {len(waiting_appointments)} appointments")
-            # Clear old notifications for users no longer in queue
-            current_user_ids = [str(appointment[0]) for appointment in waiting_appointments]
-            self._clear_old_notifications(current_user_ids)
+            for appointment in waiting_appointments:
+                user_id = appointment['user_id']
+                name = appointment['name']
+                ticket_number = appointment['ticket_number']
+                barber = appointment['barber']
+                position = appointment['position']
+                estimated_wait = appointment['estimated_wait']
 
-            for position, appointment in enumerate(waiting_appointments):
-                try:
-                    user_id = str(appointment[0])
-                    user_name = appointment[1]
-                    barber = appointment[3]
-                    logging.info(f"Processing notification for position {position}, user {user_id}")
-
-                    # Send notifications based on position
-                    await self._send_position_notification(
-                        context, position, user_id, user_name, barber
-                    )
-
-                except Exception as e:
-                    logging.error(f"Failed to process notification for position {position}, user {user_id}: {str(e)}")
+                # Skip if user was already notified
+                if user_id in self.notified_users:
                     continue
 
+                # Calculate time until appointment
+                if estimated_wait <= 5:  # 5 minutes or less
+                    message = (
+                        f"🔔 *تنبيه!*\n\n"
+                        f"مرحبا {name} 👋\n"
+                        f"دورك قريب! 🎯\n\n"
+                        f"📋 معلومات رنديفوك:\n"
+                        f"• التذكرة: {ticket_number}\n"
+                        f"• الحلاق: {barber}\n"
+                        f"• موقعك ف اللاشان: {position}\n"
+                        f"• الوقت لي باقي: {estimated_wait} دقائق ⏰\n\n"
+                        f"من فضلك كون جاهز! 🙏"
+                    )
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=message,
+                            parse_mode='Markdown'
+                        )
+                        self.notified_users.add(user_id)
+                        self.logger.info(f"Sent notification to user {user_id} for ticket {ticket_number}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to send notification to user {user_id}: {str(e)}")
+
         except Exception as e:
-            logging.error(f"Error in send_notifications: {str(e)}")
+            self.logger.error(f"Error in send_notifications: {str(e)}")
+
+    def clear_notifications(self):
+        """Clear the list of notified users"""
+        self.notified_users.clear()
+        self.logger.info("Cleared notification history")
 
     def _clear_old_notifications(self, current_user_ids):
         """Clear notifications for users no longer in queue"""

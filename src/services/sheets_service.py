@@ -128,18 +128,30 @@ class SheetsService:
             logging.error(f"Error getting barber bookings: {str(e)}")
             raise
 
-    def update_booking_status(self, row, status):
-        """Update booking status with retry logic"""
+    def get_booking_status(self, booking_id: int) -> str:
+        """Get the current status of a booking"""
         try:
-            self.sheet.update_cell(row, 6, status)
-            self.cache = {}  # Invalidate all cache
-        except gspread.exceptions.APIError as e:
-            if self._handle_api_error(e):
-                return self.update_booking_status(row, status)
-            raise
+            bookings = self.get_all_bookings()
+            for row in bookings[1:]:  # Skip header row
+                if row[0] == str(booking_id):
+                    return row[5]  # Status is in column 6
+            return None
+        except Exception as e:
+            logging.error(f"Error getting booking status: {str(e)}")
+            return None
+
+    def update_booking_status(self, booking_id: int, new_status: str) -> bool:
+        """Update the status of a booking"""
+        try:
+            bookings = self.get_all_bookings()
+            for i, row in enumerate(bookings[1:], start=2):  # Skip header row
+                if row[0] == str(booking_id):
+                    self.sheet.update_cell(i, 6, new_status)  # Status is in column 6
+                    return True
+            return False
         except Exception as e:
             logging.error(f"Error updating booking status: {str(e)}")
-            raise
+            return False
 
     def delete_booking(self, row):
         """Delete booking with retry logic"""

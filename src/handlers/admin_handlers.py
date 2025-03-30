@@ -157,57 +157,74 @@ async def view_barber_bookings(update: Update, context: CallbackContext) -> None
         logging.error(f"Error in view_barber_bookings: {str(e)}")
         await update.message.reply_text("كاين مشكل. عاود حاول.")
 
-async def handle_status_change(update: Update, context: CallbackContext) -> None:
-    """Handle changing the status of a booking"""
+async def handle_status_change(update: Update, context: CallbackContext):
+    """Handle status change button clicks"""
     query = update.callback_query
     await query.answer()
     
-    if str(query.from_user.id) != ADMIN_ID:
-        await query.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
-        return
-    
     try:
-        booking_id = query.data.split('_')[1]
-        bookings = sheets_service.get_all_bookings()
+        # Extract booking ID and new status from callback data
+        _, booking_id, new_status = query.data.split('_')
+        booking_id = int(booking_id)
         
-        for i, row in enumerate(bookings[1:], start=2):
-            if row[0] == booking_id:
-                sheets_service.update_booking_status(i, "Done")
-                notification_service.clear_notifications_for_user(booking_id)
-                await query.message.reply_text(f"✅ تم تغيير حالة الحجز إلى 'تم'")
-                return
+        # Get current booking status
+        current_status = sheets_service.get_booking_status(booking_id)
         
-        await query.message.reply_text("❌ لم يتم العثور على الحجز")
+        if current_status == "Deleted":
+            await query.message.reply_text("❌ لا يمكن تغيير حالة موعد محذوف!")
+            return
+            
+        if current_status == "Done" and new_status == "Done":
+            await query.message.reply_text("✅ هذا الموعد مكمل بالفعل!")
+            return
+            
+        # Update status in sheet
+        success = sheets_service.update_booking_status(booking_id, new_status)
         
+        if success:
+            status_emoji = "✅" if new_status == "Done" else "⏳" if new_status == "Waiting" else "❌"
+            await query.message.reply_text(f"{status_emoji} تم تحديث حالة الموعد بنجاح!")
+            
+            # Refresh the view
+            await view_waiting_bookings(update, context)
+        else:
+            await query.message.reply_text("❌ حدث خطأ أثناء تحديث حالة الموعد. حاول مرة أخرى.")
+            
     except Exception as e:
         logging.error(f"Error in handle_status_change: {str(e)}")
-        await query.message.reply_text("❌ حدث خطأ أثناء تغيير حالة الحجز")
+        await query.message.reply_text("❌ حدث خطأ غير متوقع. حاول مرة أخرى.")
 
-async def handle_delete_booking(update: Update, context: CallbackContext) -> None:
-    """Handle deleting a booking"""
+async def handle_delete_booking(update: Update, context: CallbackContext):
+    """Handle delete booking button clicks"""
     query = update.callback_query
     await query.answer()
     
-    if str(query.from_user.id) != ADMIN_ID:
-        await query.message.reply_text("⛔ ممنوع. هذا الأمر للمسؤول فقط.")
-        return
-    
     try:
-        booking_id = query.data.split('_')[1]
-        bookings = sheets_service.get_all_bookings()
+        # Extract booking ID from callback data
+        _, booking_id = query.data.split('_')
+        booking_id = int(booking_id)
         
-        for i, row in enumerate(bookings[1:], start=2):
-            if row[0] == booking_id:
-                sheets_service.delete_booking(i)
-                notification_service.clear_notifications_for_user(booking_id)
-                await query.message.reply_text(f"✅ تم حذف الحجز بنجاح")
-                return
+        # Get current booking status
+        current_status = sheets_service.get_booking_status(booking_id)
         
-        await query.message.reply_text("❌ لم يتم العثور على الحجز")
+        if current_status == "Deleted":
+            await query.message.reply_text("❌ هذا الموعد محذوف بالفعل!")
+            return
+            
+        # Delete booking from sheet
+        success = sheets_service.delete_booking(booking_id)
         
+        if success:
+            await query.message.reply_text("🗑️ تم حذف الموعد بنجاح!")
+            
+            # Refresh the view
+            await view_waiting_bookings(update, context)
+        else:
+            await query.message.reply_text("❌ حدث خطأ أثناء حذف الموعد. حاول مرة أخرى.")
+            
     except Exception as e:
         logging.error(f"Error in handle_delete_booking: {str(e)}")
-        await query.message.reply_text("❌ حدث خطأ أثناء حذف الحجز")
+        await query.message.reply_text("❌ حدث خطأ غير متوقع. حاول مرة أخرى.")
 
 async def handle_refresh(update: Update, context: CallbackContext) -> None:
     """Handle refreshing the admin panel"""
