@@ -19,8 +19,8 @@ async def choose_barber(update: Update, context: CallbackContext) -> int:
     """Handle the initial booking request and check if user already has an appointment"""
     user_id = str(update.message.chat_id)
     
-    # Check if user already has an active appointment
-    if sheets_service.has_active_appointment(user_id):
+    # Check if user is a customer and already has an active appointment
+    if not context.user_data.get('is_admin', False) and sheets_service.has_active_appointment(user_id):
         # Check if the appointment is still waiting
         if sheets_service.get_appointment_status(user_id) == "Waiting":
             await update.message.reply_text("❌ عندك رنديفو موجود. لازم تكملو قبل ما دير واحد جديد.")
