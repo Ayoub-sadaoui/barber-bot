@@ -79,12 +79,8 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
                 ]
             },
-            fallbacks=[
-                CommandHandler("cancel", cancel),
-                MessageHandler(filters.Regex("^" + BTN_ADD + "$"), choose_barber),
-            ],
-            name="booking_conversation",
-            per_message=True
+            fallbacks=[CommandHandler("cancel", cancel)],
+            name="booking_conversation"
         )
 
         # Add all handlers
@@ -106,10 +102,8 @@ def main():
         try:
             job_queue = app.job_queue
             if job_queue:
-                # Remove any existing jobs
-                job_queue.remove_all_jobs()
-                # Add notification job to run every 30 seconds
-                job_queue.run_repeating(check_and_notify_users, interval=30, first=10)
+                # Add notification job to run every 2 minutes to avoid API quota issues
+                job_queue.run_repeating(check_and_notify_users, interval=120, first=10)
                 logging.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")
