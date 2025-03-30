@@ -185,3 +185,19 @@ class SheetsService:
         """Generate a new ticket number based on the number of existing bookings"""
         bookings = self.get_all_bookings()
         return len(bookings)  # Assuming the first row is the header 
+
+    def update_cell(self, row, col, value):
+        """Update a specific cell with retry logic"""
+        try:
+            self.sheet.update_cell(row, col, value)
+            # Invalidate cache after update
+            self.cache = {}
+            logging.info(f"Updated cell ({row}, {col}) to '{value}'")
+            return True
+        except gspread.exceptions.APIError as e:
+            if self._handle_api_error(e):
+                return self.update_cell(row, col, value)
+            raise
+        except Exception as e:
+            logging.error(f"Error updating cell: {str(e)}")
+            return False 

@@ -16,7 +16,7 @@ from src.handlers.booking_handlers import (
 from src.handlers.admin_handlers import (
     admin_panel, verify_admin_password, view_waiting_bookings,
     view_done_bookings, view_barber_bookings, handle_status_change,
-    handle_delete_booking, handle_refresh
+    handle_delete_booking, handle_refresh, handle_call_customer
 )
 from src.handlers.queue_handlers import check_queue, estimated_wait_time
 from src.services.sheets_service import SheetsService
@@ -49,12 +49,19 @@ async def cancel(update: Update, context):
 async def check_and_notify_users(context) -> None:
     """Periodically check queue and notify users of their turn"""
     try:
+        logger.info("Starting notification check...")
         waiting_appointments = sheets_service.get_waiting_bookings()
+        
         if waiting_appointments:
+            logger.info(f"Found {len(waiting_appointments)} waiting appointments")
             await notification_service.send_notifications(context, waiting_appointments)
-            logger.info(f"Successfully processed notifications for {len(waiting_appointments)} users")
+            logger.info(f"Successfully processed notifications")
+        else:
+            logger.info("No waiting appointments found")
     except Exception as e:
         logger.error(f"Error in check_and_notify_users: {str(e)}")
+        # Clear cache to ensure fresh data on next check
+        sheets_service.cache = {}
 
 def main():
     """Main function to run the bot"""
@@ -100,8 +107,15 @@ def main():
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
+        app.add_handler(MessageHandler(filters.Regex(f"^📋 شوف اللايحة ديال الانتظار$"), view_waiting_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^✅ شوف المكملين$"), view_done_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^👨‍💼 الحلاق 1$"), view_barber_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^👨‍💼 الحلاق 2$"), view_barber_bookings))
+        app.add_handler(MessageHandler(filters.Regex(f"^🔄 تحديث$"), handle_refresh))
+        app.add_handler(MessageHandler(filters.Regex(f"^➕ زيد موعد$"), choose_barber))
         app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+        app.add_handler(CallbackQueryHandler(handle_call_customer, pattern="^call_"))
 
         # Initialize job queue for notifications
         try:

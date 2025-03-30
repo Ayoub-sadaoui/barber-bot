@@ -25,19 +25,18 @@ BARBERS = {
     "barber_3": "حلاق 3"
 }
 
-# Button text constants
-BTN_VIEW_QUEUE = "📋 شوف لاشان"
+# Button texts
 BTN_BOOK_APPOINTMENT = "📅 دير رنديفو"
+BTN_VIEW_QUEUE = "📋 شوف لاشان"
 BTN_CHECK_WAIT = "⏳ شحال باقي"
-BTN_VIEW_ALL = "👥 كل الرونديفوات"
-BTN_VIEW_WAITING = "⏳ لي راهم يستناو"
-BTN_VIEW_DONE = "✅ لي خلصو"
-BTN_VIEW_BARBER1 = f"👤 زبائن {BARBERS['barber_1']}"
-BTN_VIEW_BARBER2 = f"👤 زبائن {BARBERS['barber_2']}"
+BTN_VIEW_WAITING = "📋 شوف اللايحة ديال الانتظار"
+BTN_VIEW_DONE = "✅ شوف المكملين"
+BTN_VIEW_BARBER1 = "👨‍💼 الحلاق 1"
+BTN_VIEW_BARBER2 = "👨‍💼 الحلاق 2"
+BTN_ADD = "➕ زيد موعد"
+BTN_REFRESH = "🔄 تحديث"
 BTN_CHANGE_STATUS = "✅ خلاص"
 BTN_DELETE = "❌ امسح"
-BTN_ADD = "➕ زيد واحد"
-BTN_REFRESH = "🔄 شارجي"
 BTN_BACK = "🔙 ارجع"
 
 # Appointment Configuration
