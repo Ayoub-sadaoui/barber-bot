@@ -58,24 +58,67 @@ async def handle_sheet_id(update: Update, context: CallbackContext):
     admin_password = context.user_data['admin_password']
     
     if barber_shop_service.add_shop(shop_name, admin_password, sheet_id):
-        await update.message.reply_text(f"تم إضافة محل {shop_name} بنجاح!")
+        # Create a booking link for the shop
+        booking_link = f"https://t.me/{context.bot.username}?start=shop_{shop_name}"
+        await update.message.reply_text(
+            f"✅ تم إضافة محل {shop_name} بنجاح!\n\n"
+            f"🔗 رابط الحجز للمحل:\n{booking_link}\n\n"
+            f"📝 كلمة المرور للمشرف: {admin_password}\n"
+            f"📊 معرف ملف Google Sheets: {sheet_id}"
+        )
     else:
         await update.message.reply_text("حدث خطأ أثناء إضافة المحل. حاول مرة أخرى.")
     
     return ConversationHandler.END
 
 async def view_shops(update: Update, context: CallbackContext):
-    """View all barber shops"""
+    """View all barber shops and provide options to share links"""
     shops = barber_shop_service.get_all_shops()
     if not shops:
         await update.message.reply_text("لا توجد محلات حالياً.")
         return ConversationHandler.END
     
-    message = "المحلات المتوفرة:\n\n"
+    message = "📋 المحلات المتوفرة:\n\n"
+    keyboard = []
     for shop in shops:
-        message += f"• {shop}\n"
+        shop_data = barber_shop_service.get_shop(shop)
+        message += (
+            f"• {shop}\n"
+            f"  📊 معرف الملف: {shop_data['sheet_id']}\n"
+            f"  🔑 كلمة المرور: {shop_data['admin_password']}\n\n"
+        )
+        keyboard.append([InlineKeyboardButton(f"🔗 مشاركة رابط {shop}", callback_data=f"share_shop_{shop}")])
     
-    await update.message.reply_text(message)
+    keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="back_to_admin")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
+    return ConversationHandler.END
+
+async def share_shop_link(update: Update, context: CallbackContext):
+    """Share the link for a specific shop"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "back_to_admin":
+        keyboard = [
+            [BTN_ADD_SHOP],
+            [BTN_VIEW_SHOPS],
+            [BTN_DELETE_SHOP]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await query.message.reply_text(
+            "مرحباً بك في لوحة تحكم المشرف الرئيسي. اختر ما تريد القيام به:",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+    
+    shop_name = query.data.replace("share_shop_", "")
+    # Generate a booking link for the shop
+    booking_link = f"https://t.me/{context.bot.username}?start=shop_{shop_name}"
+    await query.message.reply_text(
+        f"🔗 رابط الحجز لمحل {shop_name}:\n{booking_link}\n\n"
+        f"يمكنك مشاركة هذا الرابط مع العملاء للسماح لهم بالحجز في هذا المحل."
+    )
     return ConversationHandler.END
 
 async def start_deleting_shop(update: Update, context: CallbackContext):
