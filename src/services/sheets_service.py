@@ -19,7 +19,22 @@ class SheetsService:
             creds_dict = json.loads(GOOGLE_CREDS_JSON)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
             self.client = gspread.authorize(creds)
-            self.sheet = self.client.open("Barber Shop Queue").sheet1
+            
+            try:
+                # Try to open by name first
+                self.sheet = self.client.open("3ami tayeb").sheet1
+            except gspread.exceptions.SpreadsheetNotFound:
+                logging.warning("Could not find spreadsheet by name '3ami tayeb', trying to list all spreadsheets...")
+                # List all available spreadsheets
+                spreadsheets = self.client.list_spreadsheet_files()
+                if spreadsheets:
+                    logging.info(f"Available spreadsheets: {[s['name'] for s in spreadsheets]}")
+                    # Use the first available spreadsheet
+                    self.sheet = self.client.open(spreadsheets[0]['name']).sheet1
+                    logging.info(f"Using spreadsheet: {spreadsheets[0]['name']}")
+                else:
+                    raise ValueError("No spreadsheets available for this Google account")
+            
             logging.info("Successfully initialized Google Sheets client")
         except Exception as e:
             logging.error(f"Error initializing Google Sheets client: {str(e)}")
