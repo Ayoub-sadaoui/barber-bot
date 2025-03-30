@@ -12,6 +12,9 @@ if not TELEGRAM_TOKEN:
 ADMIN_ID = "5333075597"  # Replace with your Telegram ID
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'barber2020')
 
+# Super Admin Configuration
+SUPER_ADMIN_PASSWORD = os.getenv('SUPER_ADMIN_PASSWORD', 'superadmin2024')
+
 # Google Sheets Configuration
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 GOOGLE_CREDS_JSON = os.getenv('GOOGLE_CREDENTIALS')
