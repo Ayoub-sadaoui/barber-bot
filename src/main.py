@@ -21,6 +21,7 @@ from src.handlers.admin_handlers import (
 from src.handlers.queue_handlers import check_queue, estimated_wait_time
 from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
+import time
 
 # Setup logging
 logging.basicConfig(
@@ -46,22 +47,30 @@ async def cancel(update: Update, context):
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
     return ConversationHandler.END
 
-async def check_and_notify_users(context) -> None:
+async def check_and_notify_users(context: CallbackContext) -> None:
     """Periodically check queue and notify users of their turn"""
+    start_time = time.time()
     try:
         logger.info("Starting notification check...")
+        
+        # Get waiting appointments
         waiting_appointments = sheets_service.get_waiting_bookings()
         
         if waiting_appointments:
             logger.info(f"Found {len(waiting_appointments)} waiting appointments")
+            # Send notifications
             await notification_service.send_notifications(context, waiting_appointments)
-            logger.info(f"Successfully processed notifications")
+            logger.info("Successfully processed notifications")
         else:
             logger.info("No waiting appointments found")
+            
     except Exception as e:
         logger.error(f"Error in check_and_notify_users: {str(e)}")
         # Clear cache to ensure fresh data on next check
         sheets_service.cache = {}
+    finally:
+        end_time = time.time()
+        logger.info(f"Notification check completed in {end_time - start_time:.2f} seconds")
 
 def main():
     """Main function to run the bot"""
@@ -122,7 +131,7 @@ def main():
             job_queue = app.job_queue
             if job_queue:
                 # Add notification job to run every 1 minute
-                job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+                job_queue.run_repeating(check_and_notify_users, interval=60)
                 logger.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")

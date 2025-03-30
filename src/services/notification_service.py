@@ -51,11 +51,16 @@ class NotificationService:
             for appointment in waiting_appointments:
                 try:
                     # Extract appointment data
-                    user_id = appointment[0]
-                    name = appointment[1]
-                    phone = appointment[2]
-                    barber = appointment[3]
-                    ticket_number = appointment[4]
+                    user_id = appointment[0]  # First column is user_id
+                    name = appointment[1]     # Second column is name
+                    phone = appointment[2]    # Third column is phone
+                    barber = appointment[3]   # Fourth column is barber
+                    ticket = appointment[4]   # Fifth column is ticket
+                    status = appointment[5]   # Sixth column is status
+                    
+                    # Skip if not waiting
+                    if status != "Waiting":
+                        continue
                     
                     # Calculate position (index in waiting list + 1)
                     position = waiting_appointments.index(appointment) + 1
@@ -81,7 +86,7 @@ class NotificationService:
                                 f"مرحبا {name} 👋\n"
                                 f"*حان دورك الآن!* ✨\n\n"
                                 f"📋 معلومات رنديفوك:\n"
-                                f"• التذكرة: {ticket_number}\n"
+                                f"• التذكرة: {ticket}\n"
                                 f"• الحلاق: {barber}\n\n"
                                 f"يرجى التوجه للحلاق! 🏃‍♂️"
                             )
@@ -91,7 +96,7 @@ class NotificationService:
                                 f"مرحبا {name} 👋\n"
                                 f"دورك قريب! 🎯\n\n"
                                 f"📋 معلومات رنديفوك:\n"
-                                f"• التذكرة: {ticket_number}\n"
+                                f"• التذكرة: {ticket}\n"
                                 f"• الحلاق: {barber}\n"
                                 f"• موقعك ف اللاشان: {position}\n"
                                 f"• الوقت التقريبي: {estimated_wait} دقائق ⏰\n\n"
