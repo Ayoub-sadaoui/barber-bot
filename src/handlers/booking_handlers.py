@@ -19,6 +19,7 @@ import json
 import os
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
+from typing import Dict
 
 sheets_service = SheetsService()
 notification_service = NotificationService()

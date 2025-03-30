@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from typing import Dict
 
 # Load environment variables from .env file if it exists (for local development)
 load_dotenv()
