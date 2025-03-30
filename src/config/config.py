@@ -1,17 +1,22 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file if it exists (for local development)
 load_dotenv()
 
 # Telegram Bot Configuration
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+if not TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN environment variable is not set")
+
 ADMIN_ID = "5333075597"  # Replace with your Telegram ID
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'barber2020')
 
 # Google Sheets Configuration
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 GOOGLE_CREDS_JSON = os.getenv('GOOGLE_CREDENTIALS')
+if not GOOGLE_CREDS_JSON:
+    raise ValueError("GOOGLE_CREDENTIALS environment variable is not set")
 
 # Barber Configuration
 BARBERS = {
