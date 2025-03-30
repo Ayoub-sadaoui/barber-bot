@@ -4,6 +4,8 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler, CallbackContext
 )
+from telegram.warnings import PTBUserWarning
+from warnings import filterwarnings
 from src.config.config import (
     TELEGRAM_TOKEN, SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
     ADMIN_VERIFICATION, BTN_BOOK_APPOINTMENT, BTN_VIEW_QUEUE, BTN_CHECK_WAIT,
@@ -22,6 +24,9 @@ from src.handlers.queue_handlers import check_queue, estimated_wait_time
 from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
 import time
+
+# Filter out the PTBUserWarning for CallbackQueryHandler
+filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
 # Setup logging
 logging.basicConfig(
@@ -130,8 +135,8 @@ def main():
         try:
             job_queue = app.job_queue
             if job_queue:
-                # Add notification job to run every 1 minute
-                job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+                # Add notification job to run every 30 seconds
+                job_queue.run_repeating(check_and_notify_users, interval=30, first=5)
                 logger.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")

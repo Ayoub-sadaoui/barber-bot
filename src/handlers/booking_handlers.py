@@ -12,9 +12,13 @@ from src.utils.formatters import format_wait_time, get_estimated_completion_time
 from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
 import time
+from telegram.warnings import PTBUserWarning
+from warnings import filterwarnings
 
 sheets_service = SheetsService()
 notification_service = NotificationService()
+
+filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
 async def choose_barber(update: Update, context: CallbackContext) -> int:
     """Handle the initial booking request and check if user already has an appointment"""
