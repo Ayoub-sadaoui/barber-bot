@@ -1,3 +1,6 @@
+from telegram import Update
+from telegram.ext import CallbackContext
+
 import os
 from dotenv import load_dotenv
 from typing import Dict
@@ -47,7 +50,7 @@ BTN_BACK = "🔙 ارجع"
 APPOINTMENT_DURATION_MINUTES = 10
 
 # Conversation States
-SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE, ADMIN_VERIFICATION = range(4) 
+SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE, ADMIN_VERIFICATION = range(4)
 
 async def super_admin_panel(update: Update, context: CallbackContext):
     if not context.args or context.args[0] != SUPER_ADMIN_PASSWORD:
