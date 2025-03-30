@@ -20,10 +20,12 @@ async def choose_barber(update: Update, context: CallbackContext) -> int:
     user_id = str(update.message.chat_id)
     
     # Check if user already has an active appointment
-    if sheets_service.has_active_appointment(user_id) and not context.user_data.get('is_admin', False):
-        await update.message.reply_text("❌ عندك رنديفو موجود. لازم تكملو قبل ما دير واحد جديد.")
-        return ConversationHandler.END
-    
+    if sheets_service.has_active_appointment(user_id):
+        # Check if the appointment is still waiting
+        if sheets_service.get_appointment_status(user_id) == "Waiting":
+            await update.message.reply_text("❌ عندك رنديفو موجود. لازم تكملو قبل ما دير واحد جديد.")
+            return ConversationHandler.END
+
     # Create keyboard with barber options
     keyboard = [
         [InlineKeyboardButton(BARBERS['barber_1'], callback_data="barber_1")],

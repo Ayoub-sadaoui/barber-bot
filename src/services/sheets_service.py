@@ -204,3 +204,11 @@ class SheetsService:
         except Exception as e:
             logging.error(f"Error updating cell: {str(e)}")
             return False 
+
+    def get_appointment_status(self, user_id: str) -> str:
+        """Get the status of the user's active appointment"""
+        bookings = self.get_all_bookings()
+        for booking in bookings[1:]:  # Skip header row
+            if booking[0] == user_id:
+                return booking[5]  # Assuming status is in the 6th column
+        return "None"  # No active appointment 
