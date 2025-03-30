@@ -1,6 +1,9 @@
 import logging
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters,
+    ConversationHandler, CallbackQueryHandler, CallbackContext
+)
 from src.config.config import (
     TELEGRAM_TOKEN, SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
     ADMIN_VERIFICATION, BTN_BOOK_APPOINTMENT, BTN_VIEW_QUEUE, BTN_CHECK_WAIT,
@@ -39,7 +42,7 @@ async def cancel(update: Update, context):
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
     return ConversationHandler.END
 
-async def check_and_notify_users(context: CallbackContext) -> None:
+async def check_and_notify_users(context) -> None:
     """Periodically check queue and notify users of their turn"""
     try:
         waiting_appointments = sheets_service.get_waiting_bookings()
@@ -97,8 +100,8 @@ def main():
         if job_queue:
             # Remove any existing jobs
             job_queue.remove_all_jobs()
-            # Add notification job to run every minute
-            job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
+            # Add notification job to run every 2 minutes
+            job_queue.run_repeating(check_and_notify_users, interval=120, first=10)
             logging.info("Notification job queue initialized successfully")
         else:
             logging.error("Job queue not available")
