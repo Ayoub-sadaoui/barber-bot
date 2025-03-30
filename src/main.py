@@ -67,7 +67,7 @@ def main():
             ],
             states={
                 SELECTING_BARBER: [
-                    CallbackQueryHandler(barber_selection, pattern="^barber_", per_message=True)
+                    CallbackQueryHandler(barber_selection, pattern="^barber_")
                 ],
                 ENTERING_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
@@ -84,7 +84,6 @@ def main():
                 MessageHandler(filters.Regex("^" + BTN_ADD + "$"), choose_barber),
             ],
             name="booking_conversation",
-            persistent=False,
             per_message=True
         )
 
