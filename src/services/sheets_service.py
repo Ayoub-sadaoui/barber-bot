@@ -171,10 +171,13 @@ class SheetsService:
         self._init_client()
         self.cache = {}
 
-    def has_active_appointment(self, user_id):
-        """Check if user has an active appointment"""
+    def has_active_appointment(self, user_id: str) -> bool:
+        """Check if the user has an active appointment"""
         bookings = self.get_all_bookings()
-        return any(row[0] == str(user_id) and row[5] == "Waiting" for row in bookings[1:])
+        for booking in bookings[1:]:  # Skip header row
+            if booking[0] == user_id and booking[5] != "Done" and booking[5] != "Deleted":
+                return True
+        return False
 
     def append_booking(self, booking_data):
         """Add a new booking to the sheet"""
