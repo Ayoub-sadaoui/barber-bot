@@ -2,7 +2,7 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
-    ConversationHandler, CallbackQueryHandler, CallbackContext
+    ConversationHandler, CallbackQueryHandler
 )
 from src.config.config import (
     TELEGRAM_TOKEN, SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
@@ -67,7 +67,7 @@ def main():
             ],
             states={
                 SELECTING_BARBER: [
-                    CallbackQueryHandler(barber_selection, pattern="^barber_")
+                    CallbackQueryHandler(barber_selection, pattern="^barber_", per_message=True)
                 ],
                 ENTERING_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
@@ -84,7 +84,8 @@ def main():
                 MessageHandler(filters.Regex("^" + BTN_ADD + "$"), choose_barber),
             ],
             name="booking_conversation",
-            persistent=False
+            persistent=False,
+            per_message=True
         )
 
         # Add all handlers
@@ -103,15 +104,19 @@ def main():
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
         # Initialize job queue for notifications
-        job_queue = app.job_queue
-        if job_queue:
-            # Remove any existing jobs
-            job_queue.remove_all_jobs()
-            # Add notification job to run every minute
-            job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
-            logging.info("Notification job queue initialized successfully")
-        else:
-            logging.error("Job queue not available")
+        try:
+            job_queue = app.job_queue
+            if job_queue:
+                # Remove any existing jobs
+                job_queue.remove_all_jobs()
+                # Add notification job to run every 30 seconds
+                job_queue.run_repeating(check_and_notify_users, interval=30, first=10)
+                logging.info("Notification job queue initialized successfully")
+            else:
+                raise ValueError("Job queue is not available")
+        except Exception as e:
+            logging.error(f"Failed to initialize job queue: {str(e)}")
+            raise
 
         logging.info("Bot is starting...")
         app.run_polling(allowed_updates=Update.ALL_TYPES)
