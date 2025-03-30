@@ -11,6 +11,7 @@ from src.utils.validators import is_valid_name, is_valid_phone
 from src.utils.formatters import format_wait_time, get_estimated_completion_time
 from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
+import time
 
 sheets_service = SheetsService()
 notification_service = NotificationService()
@@ -130,3 +131,24 @@ async def handle_phone(update: Update, context: CallbackContext) -> int:
         logging.error(f"Error in handle_phone: {str(e)}")
         await update.message.reply_text("❌ حدث خطأ أثناء حفظ الحجز. يرجى المحاولة مرة أخرى لاحقًا.")
         return ConversationHandler.END 
+
+async def check_and_notify_users(context) -> None:
+    """Periodically check queue and notify users of their turn"""
+    start_time = time.time()
+    try:
+        logger.info("Starting notification check...")
+        waiting_appointments = sheets_service.get_waiting_bookings()
+        
+        if waiting_appointments:
+            logger.info(f"Found {len(waiting_appointments)} waiting appointments")
+            await notification_service.send_notifications(context, waiting_appointments)
+            logger.info(f"Successfully processed notifications")
+        else:
+            logger.info("No waiting appointments found")
+    except Exception as e:
+        logger.error(f"Error in check_and_notify_users: {str(e)}")
+        # Clear cache to ensure fresh data on next check
+        sheets_service.cache = {}
+    finally:
+        end_time = time.time()
+        logger.info(f"Notification check completed in {end_time - start_time:.2f} seconds") 
