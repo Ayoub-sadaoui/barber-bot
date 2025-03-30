@@ -52,6 +52,7 @@ notification_service = NotificationService()
 
 async def start(update: Update, context):
     """Handle the /start command"""
+    logger.info("/start command received")
     keyboard = [["📋 شوف لاشان", "📅 دير رنديفو"],
                 ["⏳ شحال باقي"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
