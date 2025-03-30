@@ -26,6 +26,11 @@ class SheetsService:
                 json.loads(GOOGLE_CREDS_JSON), SCOPE))
             self.sheet = self.client.open("3ami tayeb").sheet1
 
+    def has_active_appointment(self, user_id):
+        """Check if user has an active appointment"""
+        bookings = self.get_all_bookings()
+        return any(row[0] == str(user_id) and row[5] == "Waiting" for row in bookings[1:])
+
     def get_all_bookings(self):
         """Get all bookings from the sheet"""
         self.refresh_connection()

@@ -1,9 +1,10 @@
 import logging
+import time
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CallbackContext
+from telegram.ext import CallbackContext, ConversationHandler
 from src.config.config import (
     SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
-    BARBERS, BTN_BOOK_APPOINTMENT
+    BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES
 )
 from src.utils.validators import is_valid_name, is_valid_phone
 from src.utils.formatters import format_wait_time, get_estimated_completion_time

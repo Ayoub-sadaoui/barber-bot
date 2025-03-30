@@ -1,5 +1,6 @@
 import logging
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 from src.config.config import (
     TELEGRAM_TOKEN, SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
     ADMIN_VERIFICATION, BTN_BOOK_APPOINTMENT, BTN_VIEW_QUEUE, BTN_CHECK_WAIT,
@@ -25,7 +26,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 sheets_service = SheetsService()
 notification_service = NotificationService()
 
-async def start(update, context):
+async def start(update: Update, context):
     """Handle the /start command"""
     keyboard = [["📋 شوف لاشان", "📅 دير رنديفو"],
                 ["⏳ شحال باقي"]]
@@ -33,7 +34,7 @@ async def start(update, context):
     await update.message.reply_text("مرحبا بيك عند الحلاق! شنو تحب دير:", reply_markup=reply_markup)
     return ConversationHandler.END
 
-async def cancel(update, context):
+async def cancel(update: Update, context):
     """Handle the /cancel command"""
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
     return ConversationHandler.END
