@@ -12,6 +12,10 @@ from src.config.config import (
     BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1, BTN_VIEW_BARBER2,
     BTN_CHANGE_STATUS, BTN_DELETE, BTN_ADD, BTN_REFRESH
 )
+from src.config.super_admin_config import (
+    ADDING_BARBER_SHOP, ENTERING_SHOP_NAME, ENTERING_SHOP_ADMIN_PASSWORD,
+    ENTERING_SHEET_ID, BTN_ADD_SHOP, BTN_VIEW_SHOPS, BTN_DELETE_SHOP
+)
 from src.handlers.booking_handlers import (
     choose_barber, barber_selection, handle_name, handle_phone
 )
@@ -19,6 +23,11 @@ from src.handlers.admin_handlers import (
     admin_panel, verify_admin_password, view_waiting_bookings,
     view_done_bookings, view_barber_bookings, handle_status_change,
     handle_delete_booking, handle_refresh, handle_call_customer
+)
+from src.handlers.super_admin_handlers import (
+    super_admin_panel, start_adding_shop, handle_shop_name,
+    handle_shop_admin_password, handle_sheet_id, view_shops,
+    start_deleting_shop, handle_shop_deletion
 )
 from src.handlers.queue_handlers import check_queue, estimated_wait_time
 from src.services.sheets_service import SheetsService
@@ -109,9 +118,34 @@ def main():
             name="booking_conversation"
         )
 
+        # Add super admin conversation handler
+        super_admin_conv_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler("superadmin", super_admin_panel),
+                MessageHandler(filters.Regex(f"^{BTN_ADD_SHOP}$"), start_adding_shop),
+                MessageHandler(filters.Regex(f"^{BTN_VIEW_SHOPS}$"), view_shops),
+                MessageHandler(filters.Regex(f"^{BTN_DELETE_SHOP}$"), start_deleting_shop)
+            ],
+            states={
+                ENTERING_SHOP_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shop_name)
+                ],
+                ENTERING_SHOP_ADMIN_PASSWORD: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shop_admin_password)
+                ],
+                ENTERING_SHEET_ID: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_sheet_id)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True,
+            name="super_admin_conversation"
+        )
+
         # Add all handlers
         app.add_handler(CommandHandler("start", start))
         app.add_handler(conv_handler)
+        app.add_handler(super_admin_conv_handler)
         
         # Add admin panel handlers
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
@@ -130,6 +164,7 @@ def main():
         app.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
         app.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
         app.add_handler(CallbackQueryHandler(handle_call_customer, pattern="^call_"))
+        app.add_handler(CallbackQueryHandler(handle_shop_deletion, pattern="^delete_shop_"))
 
         # Initialize job queue for notifications
         try:

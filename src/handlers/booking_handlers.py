@@ -5,7 +5,8 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes as CallbackContext, ConversationHandler
 from src.config.config import (
     SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
-    ADMIN_ID, BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES
+    ADMIN_ID, BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES,
+    SUPER_ADMIN_PASSWORD
 )
 from src.utils.validators import is_valid_name, is_valid_phone
 from src.utils.formatters import format_wait_time, get_estimated_completion_time
@@ -14,6 +15,10 @@ from src.services.notification_service import NotificationService
 import time
 from telegram.warnings import PTBUserWarning
 from warnings import filterwarnings
+import json
+import os
+from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
 
 sheets_service = SheetsService()
 notification_service = NotificationService()
@@ -156,3 +161,70 @@ async def check_and_notify_users(context) -> None:
     finally:
         end_time = time.time()
         logger.info(f"Notification check completed in {end_time - start_time:.2f} seconds") 
+
+class BarberShopService:
+    def __init__(self):
+        self.shops_file = "data/barber_shops.json"
+        self._ensure_data_directory()
+        self._load_shops()
+        self.creds = Credentials.from_service_account_file('path/to/your/service_account.json')
+        self.sheets_service = build('sheets', 'v4', credentials=self.creds)
+
+    def _ensure_data_directory(self):
+        """Ensure the data directory exists"""
+        os.makedirs(os.path.dirname(self.shops_file), exist_ok=True)
+        if not os.path.exists(self.shops_file):
+            self._save_shops({})
+
+    def _load_shops(self):
+        """Load barber shops from file"""
+        try:
+            with open(self.shops_file, 'r', encoding='utf-8') as f:
+                self.shops = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.shops = {}
+            self._save_shops(self.shops)
+
+    def _save_shops(self, shops: Dict):
+        """Save barber shops to file"""
+        with open(self.shops_file, 'w', encoding='utf-8') as f:
+            json.dump(shops, f, ensure_ascii=False, indent=4)
+
+    def create_google_sheet(self, shop_name: str) -> str:
+        """Create a new Google Sheet for the barber shop"""
+        spreadsheet = {
+            'properties': {
+                'title': f"{shop_name} - Appointments"
+            }
+        }
+        sheet = self.sheets_service.spreadsheets().create(body=spreadsheet, fields='spreadsheetId').execute()
+        return sheet.get('spreadsheetId')
+
+    def add_shop(self, shop_name: str, admin_password: str) -> bool:
+        """Add a new barber shop and create a Google Sheet"""
+        if shop_name in self.shops:
+            return False
+        
+        sheet_id = self.create_google_sheet(shop_name)
+        self.shops[shop_name] = {
+            "admin_password": admin_password,
+            "sheet_id": sheet_id,
+            "barbers": {}
+        }
+        self._save_shops(self.shops)
+        return True
+
+    # ... (rest of the class remains unchanged) 
+
+async def handle_sheet_id(update: Update, context: CallbackContext):
+    """Handle the Google Sheets ID input"""
+    shop_name = context.user_data['shop_name']
+    admin_password = SUPER_ADMIN_PASSWORD  # Use the super admin password
+    sheet_id = barber_shop_service.create_google_sheet(shop_name)  # Create the sheet automatically
+
+    if barber_shop_service.add_shop(shop_name, admin_password):
+        await update.message.reply_text(f"تم إضافة محل {shop_name} بنجاح!")
+    else:
+        await update.message.reply_text("حدث خطأ أثناء إضافة المحل. حاول مرة أخرى.")
+    
+    return ConversationHandler.END 
