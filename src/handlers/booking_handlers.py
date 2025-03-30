@@ -17,11 +17,10 @@ notification_service = NotificationService()
 async def choose_barber(update: Update, context: CallbackContext) -> int:
     """Handle the initial booking request"""
     user_id = str(update.message.chat_id)
-    is_admin = user_id == ADMIN_ID
-    
-    # Check if user already has an active appointment, skip for admin
-    if not is_admin and sheets_service.has_active_appointment(user_id):
-        await update.message.reply_text("⚠️ عندك رنديفو فايت. ما تقدرش دير رنديفو جديد حتى يكمل لي فايت.")
+
+    # Check if user already has an active appointment
+    if sheets_service.has_active_appointment(user_id):
+        await update.message.reply_text("❌ عندك رنديفو موجود. لازم تكملو قبل ما دير واحد جديد.")
         return ConversationHandler.END
 
     # Create inline keyboard with barber options
