@@ -79,12 +79,19 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
                 ]
             },
-            fallbacks=[CommandHandler("cancel", cancel)]
+            fallbacks=[
+                CommandHandler("cancel", cancel),
+                MessageHandler(filters.Regex("^" + BTN_ADD + "$"), choose_barber),
+            ],
+            name="booking_conversation",
+            persistent=False
         )
 
         # Add all handlers
         app.add_handler(CommandHandler("start", start))
         app.add_handler(conv_handler)
+        
+        # Add admin panel handlers
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
         app.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
@@ -100,8 +107,8 @@ def main():
         if job_queue:
             # Remove any existing jobs
             job_queue.remove_all_jobs()
-            # Add notification job to run every 2 minutes
-            job_queue.run_repeating(check_and_notify_users, interval=120, first=10)
+            # Add notification job to run every minute
+            job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
             logging.info("Notification job queue initialized successfully")
         else:
             logging.error("Job queue not available")
