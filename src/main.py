@@ -17,7 +17,8 @@ from src.config.super_admin_config import (
     ENTERING_SHEET_ID, BTN_ADD_SHOP, BTN_VIEW_SHOPS, BTN_DELETE_SHOP
 )
 from src.handlers.booking_handlers import (
-    choose_barber, barber_selection, handle_name, handle_phone
+    choose_barber, barber_selection, handle_name, handle_phone,
+    handle_shop_selection
 )
 from src.handlers.admin_handlers import (
     admin_panel, verify_admin_password, view_waiting_bookings,
