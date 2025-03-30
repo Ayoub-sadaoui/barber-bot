@@ -80,6 +80,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True,
             name="booking_conversation"
         )
 
@@ -102,8 +103,8 @@ def main():
         try:
             job_queue = app.job_queue
             if job_queue:
-                # Add notification job to run every 2 minutes to avoid API quota issues
-                job_queue.run_repeating(check_and_notify_users, interval=120, first=10)
+                # Add notification job to run every 30 seconds
+                job_queue.run_repeating(check_and_notify_users, interval=30, first=10)
                 logging.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")

@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext, ConversationHandler
 from src.config.config import (
     SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE,
-    BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES
+    ADMIN_ID, BARBERS, BTN_BOOK_APPOINTMENT, APPOINTMENT_DURATION_MINUTES
 )
 from src.utils.validators import is_valid_name, is_valid_phone
 from src.utils.formatters import format_wait_time, get_estimated_completion_time
@@ -16,109 +16,77 @@ notification_service = NotificationService()
 
 async def choose_barber(update: Update, context: CallbackContext) -> int:
     """Handle the initial booking request"""
-    logging.info(f"Booking button clicked. Message text: {update.message.text}")
-    user_id = update.message.chat_id
+    user_id = str(update.message.chat_id)
+    is_admin = user_id == ADMIN_ID
     
-    if sheets_service.has_active_appointment(user_id):
-        await update.message.reply_text("❌ عندك رندي فو مازال ما كملش. لازم تستنى حتى يكمل قبل ما دير واحد اخر.")
+    # Check if user already has an active appointment, skip for admin
+    if not is_admin and sheets_service.has_active_appointment(user_id):
+        await update.message.reply_text("⚠️ عندك رنديفو فايت. ما تقدرش دير رنديفو جديد حتى يكمل لي فايت.")
         return ConversationHandler.END
-    
-    keyboard = [[InlineKeyboardButton(name, callback_data=id)] for id, name in BARBERS.items()]
+
+    # Create inline keyboard with barber options
+    keyboard = [[
+        InlineKeyboardButton(BARBERS["barber_1"], callback_data="barber_1"),
+        InlineKeyboardButton(BARBERS["barber_2"], callback_data="barber_2")
+    ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("شكون من حلاق تحب:", reply_markup=reply_markup)
+    
+    await update.message.reply_text("اختار الحلاق لي تحب:", reply_markup=reply_markup)
     return SELECTING_BARBER
 
 async def barber_selection(update: Update, context: CallbackContext) -> int:
     """Handle barber selection"""
     query = update.callback_query
     await query.answer()
-    selected_barber = query.data.replace("barber_", "الحلاق ")
+    
+    selected_barber = BARBERS[query.data]
     context.user_data['barber'] = selected_barber
-    await query.message.reply_text(
-        f"اخترت {selected_barber}. من فضلك دخل اسمك الكامل:\n"
-        "(الاسم لازم يكون بين 3 و 30 حرف)"
-    )
+    
+    await query.message.reply_text("من فضلك دخل سميتك:")
     return ENTERING_NAME
 
 async def handle_name(update: Update, context: CallbackContext) -> int:
     """Handle name input"""
-    user_name = update.message.text
-
-    if not is_valid_name(user_name):
-        await update.message.reply_text(
-            "❌ الاسم ماشي صحيح. من فضلك دخل اسم صحيح:\n"
-            "- استخدم غير الحروف والمسافات\n"
-            "- الاسم لازم يكون بين 3 و 30 حرف\n"
-            "- بلا أرقام ولا رموز خاصة"
-        )
+    name = update.message.text.strip()
+    if len(name) < 2:
+        await update.message.reply_text("من فضلك دخل سمية صحيحة (على الأقل حرفين).")
         return ENTERING_NAME
     
-    context.user_data['name'] = user_name
-    await update.message.reply_text(
-        "دخل رقم تيليفونك:\n"
-        "(مثال: 06XXXXXXXX وﻻ 07XXXXXXXX)"
-    )
+    context.user_data['name'] = name
+    await update.message.reply_text("من فضلك دخل نمرة تيليفونك:")
     return ENTERING_PHONE
 
 async def handle_phone(update: Update, context: CallbackContext) -> int:
-    """Handle phone number input and complete booking"""
-    user_id = update.message.chat_id
-    phone = update.message.text.strip().replace(' ', '').replace('-', '')
-    
-    if not is_valid_phone(phone):
-        await update.message.reply_text(
-            "❌ Invalid phone number format. Please enter a valid Algerian phone number:\n"
-            "- Should start with 06 or 07\n"
-            "- Should be exactly 10 digits\n"
-            "Example: 0677366125"
-        )
+    """Handle phone number input"""
+    phone = update.message.text.strip()
+    if not phone.isdigit() or len(phone) < 8:
+        await update.message.reply_text("من فضلك دخل نمرة تيليفون صحيحة.")
         return ENTERING_PHONE
     
-    user_name = context.user_data.get('name')
-    selected_barber = context.user_data.get('barber')
-    
-    if not all([user_name, selected_barber]):
-        await update.message.reply_text("Something went wrong. Please start the booking process again by selecting '📅 Book Appointment'.")
-        return ConversationHandler.END
-    
     try:
-        waiting_appointments = sheets_service.get_waiting_bookings()
-        position = len(waiting_appointments)  # New position will be at the end
+        user_id = str(update.message.chat_id)
+        name = context.user_data['name']
+        barber = context.user_data['barber']
+        current_time = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
         ticket_number = sheets_service.generate_ticket_number()
-
-        # Add the new booking to Google Sheets
-        booking_data = [user_id, user_name, phone, selected_barber, 
-                       time.strftime("%Y-%m-%d %H:%M:%S"), "Waiting", ticket_number]
+        
+        # Add booking to sheet
+        booking_data = [user_id, name, phone, barber, current_time, "Waiting", ticket_number]
         sheets_service.append_booking(booking_data)
         
-        # Send confirmation message with position info
-        if position == 0:
-            await update.message.reply_text(
-                f"✅ {user_name}، تسجل رونديفو مع {selected_barber}!\n"
-                f"📱 رقم التيليفون: {phone}\n"
-                f"🎟️ رقم التذكرة: {ticket_number}\n"
-                "🎉 مبروك! راك الأول - دورك توا!"
-            )
-            notification_service.save_notification_status(str(user_id), "turn")
-        else:
-            estimated_minutes = position * APPOINTMENT_DURATION_MINUTES
-            formatted_wait_time = format_wait_time(estimated_minutes)
-            estimated_time = get_estimated_completion_time(estimated_minutes)
-            
-            await update.message.reply_text(
-                f"✅ {user_name}، تسجل رونديفو مع {selected_barber}!\n"
-                f"📱 رقم التيليفون: {phone}\n"
-                f"🎟️ رقم التذكرة: {ticket_number}\n"
-                f"📊 مرتبتك في الطابور: {position + 1}\n"
-                f"⏳ وقت الانتظار تقريبا: {formatted_wait_time}\n"
-                f"🕒 دورك غادي يجي على: {estimated_time}"
-            )
+        # Send confirmation message
+        await update.message.reply_text(
+            f"✅ تم تسجيل رنديفو جديد:\n"
+            f"الاسم: {name}\n"
+            f"التيليفون: {phone}\n"
+            f"الحلاق: {barber}\n"
+            f"التذكرة: {ticket_number}\n\n"
+            f"غادي نعيطو ليك مني يقرب دورك."
+        )
         
-        context.user_data.clear()
         return ConversationHandler.END
         
     except Exception as e:
-        logging.error(f"Error in handle_phone for user {user_id}: {str(e)}")
-        await update.message.reply_text("Sorry, we couldn't process your booking right now. Please try again in a few moments.")
-        context.user_data.clear()
+        logging.error(f"Error in handle_phone: {str(e)}")
+        await update.message.reply_text("❌ كاين مشكل. عاود حاول.")
         return ConversationHandler.END 
