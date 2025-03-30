@@ -23,7 +23,11 @@ from src.services.sheets_service import SheetsService
 from src.services.notification_service import NotificationService
 
 # Setup logging
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Initialize services
 sheets_service = SheetsService()
@@ -48,9 +52,9 @@ async def check_and_notify_users(context) -> None:
         waiting_appointments = sheets_service.get_waiting_bookings()
         if waiting_appointments:
             await notification_service.send_notifications(context, waiting_appointments)
-            logging.info(f"Successfully processed notifications for {len(waiting_appointments)} users")
+            logger.info(f"Successfully processed notifications for {len(waiting_appointments)} users")
     except Exception as e:
-        logging.error(f"Error in check_and_notify_users: {str(e)}")
+        logger.error(f"Error in check_and_notify_users: {str(e)}")
 
 def main():
     """Main function to run the bot"""
@@ -105,18 +109,18 @@ def main():
             if job_queue:
                 # Add notification job to run every 1 minute
                 job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
-                logging.info("Notification job queue initialized successfully")
+                logger.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")
         except Exception as e:
-            logging.error(f"Failed to initialize job queue: {str(e)}")
+            logger.error(f"Failed to initialize job queue: {str(e)}")
             raise
 
-        logging.info("Bot is starting...")
+        logger.info("Bot is starting...")
         app.run_polling(allowed_updates=Update.ALL_TYPES)
         
     except Exception as e:
-        logging.error(f"Error starting bot: {str(e)}")
+        logger.error(f"Error starting bot: {str(e)}")
         raise
 
 if __name__ == "__main__":
