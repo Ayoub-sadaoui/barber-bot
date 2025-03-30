@@ -131,7 +131,7 @@ def main():
             job_queue = app.job_queue
             if job_queue:
                 # Add notification job to run every 1 minute
-                job_queue.run_repeating(check_and_notify_users, interval=60)
+                job_queue.run_repeating(check_and_notify_users, interval=60, first=10)
                 logger.info("Notification job queue initialized successfully")
             else:
                 raise ValueError("Job queue is not available")
