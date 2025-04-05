@@ -6,63 +6,173 @@ import time
 from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 from src.config.config import SCOPE, GOOGLE_CREDS_JSON
+from typing import List, Dict, Optional
+from google.oauth2.service_account import Credentials
+
+logger = logging.getLogger(__name__)
 
 class SheetsService:
     def __init__(self):
         self._init_client()
         self.cache = {}
-        self.cache_timeout = 30  # Cache timeout in seconds
+        self.cache_timeout = 60  # Cache timeout in seconds
+        self.last_request_time = 0
+        self.min_request_interval = 1.1  # Minimum time between requests in seconds (to stay under 60 requests per minute)
 
     def _init_client(self):
-        """Initialize or reinitialize the Google Sheets client"""
+        """Initialize the Google Sheets client with proper credentials"""
         try:
-            creds_dict = json.loads(GOOGLE_CREDS_JSON)
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
+            scope = ['https://spreadsheets.google.com/feeds',
+                    'https://www.googleapis.com/auth/drive']
+            
+            creds_path = os.path.join(os.path.dirname(__file__), '..', '..', 'credentials.json')
+            creds = Credentials.from_service_account_file(creds_path, scopes=scope)
             self.client = gspread.authorize(creds)
-            
-            try:
-                # Try to open by name first
-                self.sheet = self.client.open("3ami tayeb").sheet1
-            except gspread.exceptions.SpreadsheetNotFound:
-                logging.warning("Could not find spreadsheet by name '3ami tayeb', trying to list all spreadsheets...")
-                # List all available spreadsheets
-                spreadsheets = self.client.list_spreadsheet_files()
-                if spreadsheets:
-                    logging.info(f"Available spreadsheets: {[s['name'] for s in spreadsheets]}")
-                    # Use the first available spreadsheet
-                    self.sheet = self.client.open(spreadsheets[0]['name']).sheet1
-                    logging.info(f"Using spreadsheet: {spreadsheets[0]['name']}")
-                else:
-                    raise ValueError("No spreadsheets available for this Google account")
-            
-            logging.info("Successfully initialized Google Sheets client")
+            logger.info("Successfully initialized Google Sheets client")
         except Exception as e:
-            logging.error(f"Error initializing Google Sheets client: {str(e)}")
+            logger.error(f"Error initializing Google Sheets client: {str(e)}")
             raise
 
-    def _get_cached_data(self, key):
-        """Get data from cache if valid"""
-        if key in self.cache:
-            timestamp, data = self.cache[key]
-            if datetime.now() - timestamp < timedelta(seconds=self.cache_timeout):
+    def _rate_limit(self):
+        """Implement rate limiting to prevent quota exceeded errors"""
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.min_request_interval:
+            sleep_time = self.min_request_interval - time_since_last_request
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
+
+    def _get_cached_data(self, sheet_id: str, key: str) -> Optional[dict]:
+        """Get cached data if it exists and is not expired"""
+        cache_entry = self.cache.get(f"{sheet_id}_{key}")
+        if cache_entry:
+            timestamp, data = cache_entry
+            if time.time() - timestamp < self.cache_timeout:
                 return data
         return None
 
-    def _set_cached_data(self, key, data):
-        """Set data in cache"""
-        self.cache[key] = (datetime.now(), data)
+    def _set_cached_data(self, sheet_id: str, key: str, data: dict):
+        """Cache data with current timestamp"""
+        self.cache[f"{sheet_id}_{key}"] = (time.time(), data)
 
-    def _handle_api_error(self, e, retry_count=0):
-        """Handle API errors with exponential backoff"""
-        if retry_count >= 3:
-            raise e
+    def get_sheet(self, sheet_id: str):
+        """Get a worksheet with rate limiting"""
+        self._rate_limit()
+        try:
+            spreadsheet = self.client.open_by_key(sheet_id)
+            return spreadsheet.sheet1
+        except Exception as e:
+            logger.error(f"Error accessing sheet {sheet_id}: {str(e)}")
+            raise
 
-        if isinstance(e, gspread.exceptions.APIError) and e.response.status_code == 429:
-            wait_time = (2 ** retry_count) * 5  # Exponential backoff
-            logging.warning(f"API quota exceeded. Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
+    def get_waiting_bookings(self, sheet_id: str) -> List[Dict]:
+        """Get waiting bookings with caching"""
+        cache_key = "waiting_bookings"
+        cached_data = self._get_cached_data(sheet_id, cache_key)
+        if cached_data:
+            return cached_data
+
+        self._rate_limit()
+        try:
+            sheet = self.get_sheet(sheet_id)
+            # Get all records and filter for waiting bookings
+            all_records = sheet.get_all_records()
+            waiting_bookings = [
+                booking for booking in all_records 
+                if booking.get('Status', '').lower() == 'waiting'
+            ]
+            self._set_cached_data(sheet_id, cache_key, waiting_bookings)
+            return waiting_bookings
+        except Exception as e:
+            logger.error(f"Error getting waiting bookings: {str(e)}")
+            return []
+
+    def get_done_bookings(self, sheet_id: str) -> List[Dict]:
+        """Get completed bookings with caching"""
+        cache_key = "done_bookings"
+        cached_data = self._get_cached_data(sheet_id, cache_key)
+        if cached_data:
+            return cached_data
+
+        self._rate_limit()
+        try:
+            sheet = self.get_sheet(sheet_id)
+            all_records = sheet.get_all_records()
+            done_bookings = [
+                booking for booking in all_records 
+                if booking.get('Status', '').lower() == 'done'
+            ]
+            self._set_cached_data(sheet_id, cache_key, done_bookings)
+            return done_bookings
+        except Exception as e:
+            logger.error(f"Error getting done bookings: {str(e)}")
+            return []
+
+    def add_booking(self, sheet_id: str, booking_data: Dict) -> bool:
+        """Add a new booking with rate limiting"""
+        self._rate_limit()
+        try:
+            sheet = self.get_sheet(sheet_id)
+            # Clear relevant cache entries
+            self.cache.pop(f"{sheet_id}_waiting_bookings", None)
+            self.cache.pop(f"{sheet_id}_done_bookings", None)
+            
+            # Add the booking
+            sheet.append_row([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                booking_data.get('name', ''),
+                booking_data.get('phone', ''),
+                booking_data.get('barber', ''),
+                booking_data.get('ticket_number', ''),
+                'Waiting'
+            ])
             return True
-        return False
+        except Exception as e:
+            logger.error(f"Error adding booking: {str(e)}")
+            return False
+
+    def update_booking_status(self, sheet_id: str, row_number: int, status: str) -> bool:
+        """Update booking status with rate limiting"""
+        self._rate_limit()
+        try:
+            sheet = self.get_sheet(sheet_id)
+            # Clear relevant cache entries
+            self.cache.pop(f"{sheet_id}_waiting_bookings", None)
+            self.cache.pop(f"{sheet_id}_done_bookings", None)
+            
+            # Update the status
+            sheet.update_cell(row_number, 6, status)  # Assuming status is in column F
+            return True
+        except Exception as e:
+            logger.error(f"Error updating booking status: {str(e)}")
+            return False
+
+    def delete_booking(self, sheet_id: str, row_number: int) -> bool:
+        """Delete a booking with rate limiting"""
+        self._rate_limit()
+        try:
+            sheet = self.get_sheet(sheet_id)
+            # Clear relevant cache entries
+            self.cache.pop(f"{sheet_id}_waiting_bookings", None)
+            self.cache.pop(f"{sheet_id}_done_bookings", None)
+            
+            # Delete the row
+            sheet.delete_rows(row_number)
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting booking: {str(e)}")
+            return False
+
+    def clear_cache(self, sheet_id: str = None):
+        """Clear cache for a specific sheet or all sheets"""
+        if sheet_id:
+            keys_to_remove = [k for k in self.cache.keys() if k.startswith(f"{sheet_id}_")]
+            for key in keys_to_remove:
+                self.cache.pop(key, None)
+        else:
+            self.cache.clear()
 
     def get_all_bookings(self):
         """Get all bookings with caching"""
@@ -80,36 +190,6 @@ class SheetsService:
             raise
         except Exception as e:
             logging.error(f"Error getting all bookings: {str(e)}")
-            raise
-
-    def get_waiting_bookings(self):
-        """Get waiting bookings with caching"""
-        try:
-            cached_data = self._get_cached_data('waiting_bookings')
-            if cached_data:
-                return cached_data
-
-            all_bookings = self.get_all_bookings()
-            waiting_bookings = [booking for booking in all_bookings[1:] if booking[5] == "Waiting"]
-            self._set_cached_data('waiting_bookings', waiting_bookings)
-            return waiting_bookings
-        except Exception as e:
-            logging.error(f"Error getting waiting bookings: {str(e)}")
-            raise
-
-    def get_done_bookings(self):
-        """Get completed bookings with caching"""
-        try:
-            cached_data = self._get_cached_data('done_bookings')
-            if cached_data:
-                return cached_data
-
-            all_bookings = self.get_all_bookings()
-            done_bookings = [booking for booking in all_bookings[1:] if booking[5] == "Done"]
-            self._set_cached_data('done_bookings', done_bookings)
-            return done_bookings
-        except Exception as e:
-            logging.error(f"Error getting done bookings: {str(e)}")
             raise
 
     def get_barber_bookings(self, barber_name):
