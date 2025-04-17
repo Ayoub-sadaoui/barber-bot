@@ -637,7 +637,7 @@ def main():
         token = os.getenv('TELEGRAM_TOKEN')
         if not token:
             logger.error("No TELEGRAM_TOKEN found in environment variables")
-            return
+            return None
         
         # Create the Application with proper error handling
         application = Application.builder().token(token).build()
@@ -690,11 +690,7 @@ def main():
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,  # Drop pending updates to avoid conflicts
-            close_loop=False,  # Don't close the event loop on stop
-            read_timeout=30,  # Increase read timeout for Railway
-            write_timeout=30,  # Increase write timeout for Railway
-            connect_timeout=30,  # Increase connect timeout for Railway
-            pool_timeout=30  # Increase pool timeout for Railway
+            close_loop=False  # Don't close the event loop on stop
         )
         
         return application
