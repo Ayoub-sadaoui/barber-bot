@@ -615,7 +615,12 @@ async def check_and_notify_users(context):
 async def handle_booking_button(update: Update, context):
     """Handle the booking button click."""
     logger.info(f"Booking button clicked by user {update.message.chat_id}")
-    return await choose_barber(update, context)
+    try:
+        return await choose_barber(update, context)
+    except Exception as e:
+        logger.error(f"Error handling booking button: {e}")
+        await update.message.reply_text("❌ عندنا مشكل. حاول مرة أخرى.")
+        return ConversationHandler.END
 
 async def admin_callback(update: Update, context):
     await admin_panel(update, context)
@@ -662,7 +667,7 @@ def main():
             fallbacks=[CommandHandler("cancel", cancel)],
             name="booking_conversation",
             persistent=False,
-            per_message=True
+            per_message=False  # Change to False to avoid PTBUserWarning
         )
 
         # Register handlers in the correct order
