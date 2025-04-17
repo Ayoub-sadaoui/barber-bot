@@ -383,7 +383,8 @@ async def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel)]
+        fallbacks=[CommandHandler("cancel", cancel)],
+        per_message=True  # Add this to track CallbackQueryHandler for every message
     )
 
     # Add all handlers
@@ -401,7 +402,7 @@ async def main():
 
     # Initialize job queue for notifications
     if application.job_queue:
-        application.job_queue.remove_all_jobs()
+        # Remove the remove_all_jobs() call and directly schedule the job
         application.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
         logger.info("Job queue initialized successfully")
     else:
