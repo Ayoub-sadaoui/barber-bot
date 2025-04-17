@@ -380,8 +380,7 @@ async def main():
     # Create the Application
     application = Application.builder().token(token).build()
 
-    # Add conversation handler for booking process - Fix per_message and handlers
-    # First, register regular message handlers separately
+    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber))
     application.add_handler(CommandHandler("admin", admin_panel))
@@ -395,7 +394,12 @@ async def main():
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
     application.add_handler(CommandHandler("cancel", cancel))
     
-    # Now register callback handlers
+    # Register conversation states
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name), group=1)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone), group=2)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password), group=3)
+    
+    # Register callback handlers
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
     application.add_handler(CallbackQueryHandler(barber_selection, pattern="^barber_"))
@@ -407,25 +411,21 @@ async def main():
     else:
         logger.error("Job queue not available")
 
-    # Start the bot
+    # Start the bot and wait for it to close
     logger.info("Starting bot...")
-    await application.initialize()
-    await application.start()
-    await application.run_polling(stop_signals=None)  # Prevent signals from stopping the app
+    return application
+
+def run_bot():
+    """Run the bot."""
+    try:
+        # Use the recommended asyncio.run() to properly manage the event loop
+        import asyncio
+        application = asyncio.run(main())
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")
+    except Exception as e:
+        logger.error(f"Error: {e}")
 
 if __name__ == '__main__':
-    import asyncio
-    
-    # Set up the event loop properly
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-    finally:
-        loop.run_until_complete(asyncio.sleep(0.250))  # Small delay before closing
-        loop.close() 
+    run_bot() 
