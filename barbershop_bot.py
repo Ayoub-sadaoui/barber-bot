@@ -370,7 +370,8 @@ async def cancel_callback(update: Update, context):
     return ConversationHandler.END
 
 # Modify the main function to fix the event loop issue
-async def main():
+def main():
+    """Set up and run the bot."""
     # Get bot token from environment variable
     token = os.getenv('TELEGRAM_TOKEN')
     if not token:
@@ -411,21 +412,18 @@ async def main():
     else:
         logger.error("Job queue not available")
 
-    # Start the bot and wait for it to close
+    # Start the bot
     logger.info("Starting bot...")
+    
+    # Use the non-async method to start polling
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
     return application
 
-def run_bot():
-    """Run the bot."""
+if __name__ == '__main__':
     try:
-        # Use the recommended asyncio.run() to properly manage the event loop
-        import asyncio
-        application = asyncio.run(main())
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        main()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
     except Exception as e:
-        logger.error(f"Error: {e}")
-
-if __name__ == '__main__':
-    run_bot() 
+        logger.error(f"Error: {e}") 
