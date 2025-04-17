@@ -656,7 +656,8 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         name="booking_conversation",
-        persistent=False
+        persistent=False,
+        per_message=True
     )
 
     # Create admin conversation handler
@@ -671,7 +672,8 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         name="admin_conversation",
-        persistent=False
+        persistent=False,
+        per_message=True
     )
 
     # Register handlers in the correct order
@@ -697,7 +699,7 @@ def main():
 
     # Initialize job queue for notifications with 1-minute interval
     if application.job_queue:
-        application.job_queue.run_repeating(check_and_notify_users, interval=60, first=1)  # Check every minute
+        application.job_queue.run_repeating(check_and_notify_users, interval=60, first=1)
         logger.info("Job queue initialized successfully")
     else:
         logger.error("Job queue not available")
