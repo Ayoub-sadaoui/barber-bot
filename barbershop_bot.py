@@ -365,9 +365,9 @@ async def main():
     # Add conversation handler for booking process
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-            CommandHandler("admin", admin_panel),
-            MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
+            CallbackQueryHandler(choose_barber, pattern="^book_appointment$"),
+            CallbackQueryHandler(admin_panel, pattern="^admin$"),
+            CallbackQueryHandler(choose_barber, pattern="^add$")
         ],
         states={
             SELECTING_BARBER: [
@@ -383,8 +383,8 @@ async def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=True  # Changed to True to properly track CallbackQueryHandler
+        fallbacks=[CallbackQueryHandler(cancel, pattern="^cancel$")],
+        per_message=False  # Changed to False since we're using MessageHandler for some states
     )
 
     # Add all handlers
@@ -415,10 +415,6 @@ async def main():
         await application.run_polling()
     except Exception as e:
         logger.error(f"Error running bot: {e}")
-        try:
-            await application.stop()
-        except Exception as stop_error:
-            logger.error(f"Error stopping application: {stop_error}")
     finally:
         try:
             await application.stop()
