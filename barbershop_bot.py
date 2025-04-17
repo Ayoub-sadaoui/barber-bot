@@ -352,6 +352,24 @@ async def check_and_notify_users(context):
     except Exception as e:
         logging.error(f"Error in check_and_notify_users: {str(e)}")
 
+# Add these functions to handle button callbacks properly
+async def book_appointment_callback(update: Update, context):
+    await choose_barber(update, context)
+    return SELECTING_BARBER
+
+async def admin_callback(update: Update, context):
+    await admin_panel(update, context)
+    return ADMIN_VERIFICATION
+
+async def add_callback(update: Update, context):
+    await choose_barber(update, context)
+    return SELECTING_BARBER
+
+async def cancel_callback(update: Update, context):
+    await cancel(update, context)
+    return ConversationHandler.END
+
+# Modify the main function to fix the event loop issue
 async def main():
     # Get bot token from environment variable
     token = os.getenv('TELEGRAM_TOKEN')
@@ -362,34 +380,12 @@ async def main():
     # Create the Application
     application = Application.builder().token(token).build()
 
-    # Add conversation handler for booking process
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(choose_barber, pattern="^book_appointment$"),
-            CallbackQueryHandler(admin_panel, pattern="^admin$"),
-            CallbackQueryHandler(choose_barber, pattern="^add$")
-        ],
-        states={
-            SELECTING_BARBER: [
-                CallbackQueryHandler(barber_selection, pattern="^barber_")
-            ],
-            ENTERING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
-            ],
-            ENTERING_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
-            ],
-            ADMIN_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
-            ]
-        },
-        fallbacks=[CallbackQueryHandler(cancel, pattern="^cancel$")],
-        per_message=False  # Changed to False since we're using MessageHandler for some states
-    )
-
-    # Add all handlers
+    # Add conversation handler for booking process - Fix per_message and handlers
+    # First, register regular message handlers separately
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)
+    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
@@ -397,8 +393,12 @@ async def main():
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
+    application.add_handler(CommandHandler("cancel", cancel))
+    
+    # Now register callback handlers
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+    application.add_handler(CallbackQueryHandler(barber_selection, pattern="^barber_"))
 
     # Initialize job queue for notifications
     if application.job_queue:
@@ -408,24 +408,24 @@ async def main():
         logger.error("Job queue not available")
 
     # Start the bot
-    try:
-        logger.info("Starting bot...")
-        await application.initialize()
-        await application.start()
-        await application.run_polling()
-    except Exception as e:
-        logger.error(f"Error running bot: {e}")
-    finally:
-        try:
-            await application.stop()
-        except Exception as stop_error:
-            logger.error(f"Error stopping application: {stop_error}")
+    logger.info("Starting bot...")
+    await application.initialize()
+    await application.start()
+    await application.run_polling(stop_signals=None)  # Prevent signals from stopping the app
 
 if __name__ == '__main__':
     import asyncio
+    
+    # Set up the event loop properly
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
-        asyncio.run(main())
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}") 
+        logger.error(f"Unexpected error: {e}")
+    finally:
+        loop.run_until_complete(asyncio.sleep(0.250))  # Small delay before closing
+        loop.close() 
