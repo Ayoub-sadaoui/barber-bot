@@ -408,11 +408,10 @@ def main():
     # Create the Application
     application = Application.builder().token(token).build()
 
-    # Create conversation handler
-    conv_handler = ConversationHandler(
+    # Create booking conversation handler
+    booking_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-            CommandHandler("admin", admin_panel),
             MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
         ],
         states={
@@ -424,9 +423,6 @@ def main():
             ],
             ENTERING_PHONE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
-            ],
-            ADMIN_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -434,9 +430,25 @@ def main():
         persistent=False
     )
 
-    # Register handlers
+    # Create admin conversation handler
+    admin_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("admin", admin_panel)
+        ],
+        states={
+            ADMIN_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        name="admin_conversation",
+        persistent=False
+    )
+
+    # Register handlers in the correct order
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)  # Add conversation handler first
+    application.add_handler(booking_handler)  # Add booking handler first
+    application.add_handler(admin_handler)    # Add admin handler second
     
     # Add regular command handlers
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
