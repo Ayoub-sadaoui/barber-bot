@@ -384,7 +384,7 @@ async def main():
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=False  # Changed to False since we're using MessageHandler
+        per_message=True  # Changed to True to properly track CallbackQueryHandler
     )
 
     # Add all handlers
