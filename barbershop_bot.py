@@ -6,6 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -628,92 +629,80 @@ async def cancel_callback(update: Update, context):
 # Modify the main function to fix the event loop issue
 def main():
     """Set up and run the bot."""
-    # Get bot token from environment variable
-    token = os.getenv('TELEGRAM_TOKEN')
-    if not token:
-        logger.error("No TELEGRAM_TOKEN found in environment variables")
-        return
-    
-    # Create the Application
-    application = Application.builder().token(token).build()
+    try:
+        # Get bot token from environment variable
+        token = os.getenv('TELEGRAM_TOKEN')
+        if not token:
+            logger.error("No TELEGRAM_TOKEN found in environment variables")
+            return
+        
+        # Create the Application with proper error handling
+        application = Application.builder().token(token).build()
 
-    # Create booking conversation handler
-    booking_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-            MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
-        ],
-        states={
-            SELECTING_BARBER: [
-                CallbackQueryHandler(barber_selection, pattern="^barber_")
+        # Create booking conversation handler
+        booking_handler = ConversationHandler(
+            entry_points=[
+                MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
+                MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
             ],
-            ENTERING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
-            ],
-            ENTERING_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
-            ]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        name="booking_conversation",
-        persistent=False,
-        per_message=True
-    )
+            states={
+                SELECTING_BARBER: [
+                    CallbackQueryHandler(barber_selection, pattern="^barber_")
+                ],
+                ENTERING_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
+                ],
+                ENTERING_PHONE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            name="booking_conversation",
+            persistent=False,
+            per_message=True
+        )
 
-    # Create admin conversation handler
-    admin_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("admin", admin_panel)
-        ],
-        states={
-            ADMIN_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
-            ]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        name="admin_conversation",
-        persistent=False,
-        per_message=True
-    )
+        # Register handlers in the correct order
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(booking_handler)  # Add booking handler first
+        
+        # Add regular command handlers
+        application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
+        application.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
+        
+        # Add callback query handlers
+        application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
+        application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+        application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
 
-    # Register handlers in the correct order
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(booking_handler)  # Add booking handler first
-    application.add_handler(admin_handler)    # Add admin handler second
-    
-    # Add regular command handlers
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_DONE}$"), view_done_bookings))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
-    
-    # Add callback query handlers
-    application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
-    application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+        # Initialize job queue for notifications with 1-minute interval
+        if application.job_queue:
+            application.job_queue.run_repeating(check_and_notify_users, interval=60, first=1)
+            logger.info("Job queue initialized successfully")
+        else:
+            logger.error("Job queue not available")
 
-    # Add queue view handler
-    application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
-
-    # Initialize job queue for notifications with 1-minute interval
-    if application.job_queue:
-        application.job_queue.run_repeating(check_and_notify_users, interval=60, first=1)
-        logger.info("Job queue initialized successfully")
-    else:
-        logger.error("Job queue not available")
-
-    # Start the bot
-    logger.info("Starting bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-    
-    return application
+        # Start the bot with proper error handling
+        logger.info("Starting bot...")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,  # Drop pending updates to avoid conflicts
+            close_loop=False  # Don't close the event loop on stop
+        )
+        
+        return application
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        raise
 
 if __name__ == '__main__':
     try:
         main()
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped!")
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user!")
     except Exception as e:
-        logger.error(f"Error: {e}") 
+        logger.error(f"Fatal error: {e}")
+        # Wait a bit before restarting to avoid rapid restarts
+        time.sleep(5)
+        # Restart the bot
+        main() 
