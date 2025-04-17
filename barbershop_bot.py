@@ -64,7 +64,7 @@ class SheetsService:
     def refresh_connection(self):
         try:
             self.sheet.get_all_values()
-    except Exception:
+        except Exception:
             creds_dict = json.loads(GOOGLE_CREDS_JSON)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(
                 creds_dict, 
@@ -114,9 +114,9 @@ class NotificationService:
         self.notification_cache[f"{user_id}_{notification_type}"] = datetime.now().timestamp()
 
     def was_recently_notified(self, user_id: str, notification_type: str) -> bool:
-    key = f"{user_id}_{notification_type}"
+        key = f"{user_id}_{notification_type}"
         if key not in self.notification_cache:
-        return False
+            return False
         time_diff = datetime.now().timestamp() - self.notification_cache[key]
         return time_diff < 300
 
@@ -127,41 +127,45 @@ class NotificationService:
 
     async def send_notifications(self, context, waiting_appointments):
         try:
-        current_user_ids = [appointment[0] for appointment in waiting_appointments]
+            # Clean up old notifications
+            current_user_ids = [appointment[0] for appointment in waiting_appointments]
             for key in list(self.notification_cache.keys()):
-            user_id = key.split('_')[0]
-            if user_id not in current_user_ids:
+                user_id = key.split('_')[0]
+                if user_id not in current_user_ids:
                     del self.notification_cache[key]
-        
-        for position, appointment in enumerate(waiting_appointments):
-            user_id = appointment[0]
-            user_name = appointment[1]
-            barber = appointment[3]
             
-            try:
+            # Send notifications to users
+            for position, appointment in enumerate(waiting_appointments):
+                user_id = appointment[0]
+                user_name = appointment[1]
+                barber = appointment[3]
+                
+                try:
+                    # Notify user when it's their turn
                     if position == 0 and not self.was_recently_notified(user_id, "turn"):
-                    await context.bot.send_message(
-                        chat_id=int(user_id),
-                        text=f"🎉 {user_name}، دورك توا!\n"
-                             f"روح لـ {barber}.\n"
-                             f"إذا ما جيتش في 5 دقايق، تقدر تخسر دورك."
-                    )
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
+                            text=f"🎉 {user_name}، دورك توا!\n"
+                                 f"روح لـ {barber}.\n"
+                                 f"إذا ما جيتش في 5 دقايق، تقدر تخسر دورك."
+                        )
                         self.save_notification_status(user_id, "turn")
-                    logging.info(f"Sent turn notification to user {user_id}")
-                
-                    elif position == 1 and not self.was_recently_notified(user_id, "warning"):
-                    await context.bot.send_message(
-                        chat_id=int(user_id),
-                        text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 15 دقيقة.\n"
-                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
-                    )
-                        self.save_notification_status(user_id, "warning")
-                    logging.info(f"Sent 15-min warning to user {user_id}")
-                
-            except Exception as e:
-                    logging.error(f"Error sending notification to user {user_id}: {str(e)}")
+                        logging.info(f"Sent turn notification to user {user_id}")
                     
-    except Exception as e:
+                    # Notify next user in line
+                    elif position == 1 and not self.was_recently_notified(user_id, "warning"):
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
+                            text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 15 دقيقة.\n"
+                                 f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                        )
+                        self.save_notification_status(user_id, "warning")
+                        logging.info(f"Sent 15-min warning to user {user_id}")
+                
+                except Exception as e:
+                    logging.error(f"Error sending notification to user {user_id}: {str(e)}")
+        
+        except Exception as e:
             logging.error(f"Error in send_notifications: {str(e)}")
 
 # Initialize services
@@ -180,7 +184,7 @@ async def start(update: Update, context):
 
 async def cancel(update: Update, context):
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
-        return ConversationHandler.END
+    return ConversationHandler.END
     
 async def choose_barber(update: Update, context):
     keyboard = [
@@ -334,7 +338,7 @@ async def check_queue(update: Update, context):
             
 async def estimated_wait_time(update: Update, context):
     waiting_appointments = sheets_service.get_waiting_bookings()
-            total_waiting = len(waiting_appointments)
+    total_waiting = len(waiting_appointments)
     
     if total_waiting == 0:
         await update.message.reply_text("ما كاين حتى واحد في لاشان. تقدر تحجز توا!")
@@ -411,7 +415,7 @@ def main():
     if application.job_queue:
         application.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
         logger.info("Job queue initialized successfully")
-        else:
+    else:
         logger.error("Job queue not available")
 
     # Start the bot
