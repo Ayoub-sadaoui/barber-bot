@@ -31,7 +31,7 @@ BARBERS = {
 
 # Button text constants
 BTN_VIEW_QUEUE = "📋 شوف لاشان"
-BTN_BOOK_APPOINTMENT = "📅 دير رنديفو"
+BTN_BOOK_APPOINTMENT = "✂️ دير رنديفو"
 BTN_CHECK_WAIT = "⏳ شحال باقي"
 BTN_VIEW_WAITING = "⏳ لي راهم يستناو"
 BTN_VIEW_DONE = "✅ لي خلصو"
@@ -174,12 +174,17 @@ notification_service = NotificationService()
 
 # Handlers
 async def start(update: Update, context):
+    """Start the conversation and show available options."""
     keyboard = [
         ["📋 شوف لاشان", "✂️ دير رنديفو"],
         ["⏳ شحال باقي"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("👋 مرحبا بيك عند الحلاق!\n🤔 شنو تحب دير:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "👋 مرحبا بيك عند الحلاق!\n"
+        "🤔 شنو تحب دير:",
+        reply_markup=reply_markup
+    )
     return ConversationHandler.END
 
 async def cancel(update: Update, context):
@@ -187,20 +192,36 @@ async def cancel(update: Update, context):
     return ConversationHandler.END
     
 async def choose_barber(update: Update, context):
+    """Handle the initial appointment booking request."""
     keyboard = [
         [InlineKeyboardButton(f"👨‍💇‍♂️ {BARBERS['barber_1']}", callback_data="barber_1")],
         [InlineKeyboardButton(f"👨‍💇‍♂️ {BARBERS['barber_2']}", callback_data="barber_2")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("💈 شوف منين تحب تحلق:", reply_markup=reply_markup)
-    return SELECTING_BARBER
+    
+    try:
+        await update.message.reply_text(
+            "💈 شوف منين تحب تحلق:",
+            reply_markup=reply_markup
+        )
+        return SELECTING_BARBER
+    except Exception as e:
+        logger.error(f"Error in choose_barber: {e}")
+        await update.message.reply_text("❌ عندنا مشكل. حاول مرة أخرى.")
+        return ConversationHandler.END
 
 async def barber_selection(update: Update, context):
+    """Handle the barber selection."""
     query = update.callback_query
-    await query.answer()
-    context.user_data["barber"] = BARBERS[query.data]
-    await query.edit_message_text("✏️ كتب سميتك من فضلك:")
-    return ENTERING_NAME
+    try:
+        await query.answer()
+        context.user_data["barber"] = BARBERS[query.data]
+        await query.edit_message_text("✏️ كتب سميتك من فضلك:")
+        return ENTERING_NAME
+    except Exception as e:
+        logger.error(f"Error in barber_selection: {e}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+        return ConversationHandler.END
 
 async def handle_name(update: Update, context):
     context.user_data["name"] = update.message.text
@@ -415,7 +436,7 @@ def main():
 
     # Register handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)  # Add conversation handler
+    application.add_handler(conv_handler)  # Add conversation handler first
     
     # Add regular command handlers
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
@@ -439,8 +460,6 @@ def main():
 
     # Start the bot
     logger.info("Starting bot...")
-    
-    # Use the non-async method to start polling
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     
     return application
