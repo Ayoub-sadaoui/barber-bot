@@ -186,6 +186,7 @@ notification_service = NotificationService()
 # Handlers
 async def start(update: Update, context):
     """Start the conversation and show available options."""
+    logger.info(f"Start command received from user {update.message.chat_id}")
     keyboard = [
         [BTN_VIEW_QUEUE, BTN_BOOK_APPOINTMENT],
         [BTN_CHECK_WAIT]
@@ -230,6 +231,7 @@ async def get_position_and_wait_time(user_id: str, barber_name: str = None):
 
 async def choose_barber(update: Update, context):
     """Handle the initial appointment booking request."""
+    logger.info(f"Book appointment button clicked by user {update.message.chat_id}")
     user_id = str(update.message.chat_id)
     
     # Check if this is an admin adding an appointment
@@ -610,9 +612,10 @@ async def check_and_notify_users(context):
         logging.error(f"Error in check_and_notify_users: {str(e)}")
 
 # Add these functions to handle button callbacks properly
-async def book_appointment_callback(update: Update, context):
-    await choose_barber(update, context)
-    return SELECTING_BARBER
+async def handle_booking_button(update: Update, context):
+    """Handle the booking button click."""
+    logger.info(f"Booking button clicked by user {update.message.chat_id}")
+    return await choose_barber(update, context)
 
 async def admin_callback(update: Update, context):
     await admin_panel(update, context)
@@ -642,8 +645,8 @@ def main():
         # Create booking conversation handler
         booking_handler = ConversationHandler(
             entry_points=[
-                MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
-                MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
+                MessageHandler(filters.Text([BTN_BOOK_APPOINTMENT]), handle_booking_button),
+                MessageHandler(filters.Text([BTN_ADD]), choose_barber)
             ],
             states={
                 SELECTING_BARBER: [
@@ -667,8 +670,8 @@ def main():
         application.add_handler(booking_handler)  # Add booking handler first
         
         # Add regular command handlers
-        application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
-        application.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
+        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_QUEUE]), check_queue))
+        application.add_handler(MessageHandler(filters.Text([BTN_CHECK_WAIT]), estimated_wait_time))
         
         # Add callback query handlers
         application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
@@ -682,27 +685,39 @@ def main():
         else:
             logger.error("Job queue not available")
 
-        # Start the bot with proper error handling
-        logger.info("Starting bot...")
+        # Start the bot with proper error handling for Railway
+        logger.info("Starting bot on Railway...")
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,  # Drop pending updates to avoid conflicts
-            close_loop=False  # Don't close the event loop on stop
+            close_loop=False,  # Don't close the event loop on stop
+            read_timeout=30,  # Increase read timeout for Railway
+            write_timeout=30,  # Increase write timeout for Railway
+            connect_timeout=30,  # Increase connect timeout for Railway
+            pool_timeout=30  # Increase pool timeout for Railway
         )
         
         return application
     except Exception as e:
         logger.error(f"Error in main: {e}")
-        raise
+        # Don't raise the exception, just log it and return None
+        return None
 
 if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user!")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        # Wait a bit before restarting to avoid rapid restarts
-        time.sleep(5)
-        # Restart the bot
-        main() 
+    # For Railway deployment, we want to keep the process running
+    # and handle restarts gracefully
+    while True:
+        try:
+            logger.info("Starting bot process...")
+            app = main()
+            if app is None:
+                logger.error("Bot failed to start, waiting before retry...")
+                time.sleep(30)  # Wait 30 seconds before retrying
+                continue
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user!")
+            break
+        except Exception as e:
+            logger.error(f"Fatal error: {e}")
+            time.sleep(30)  # Wait 30 seconds before retrying
+            continue 
