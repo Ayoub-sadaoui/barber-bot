@@ -118,7 +118,7 @@ class NotificationService:
         if key not in self.notification_cache:
             return False
         time_diff = datetime.now().timestamp() - self.notification_cache[key]
-        return time_diff < 300
+        return time_diff < 300  # 5 minutes cooldown
 
     def clear_notifications_for_user(self, user_id: str):
         keys_to_remove = [key for key in self.notification_cache.keys() if key.startswith(f"{user_id}_")]
@@ -133,7 +133,7 @@ class NotificationService:
                 user_id = key.split('_')[0]
                 if user_id not in current_user_ids:
                     del self.notification_cache[key]
-            
+        
             # Send notifications to users
             for position, appointment in enumerate(waiting_appointments):
                 user_id = appointment[0]
@@ -152,19 +152,29 @@ class NotificationService:
                         self.save_notification_status(user_id, "turn")
                         logging.info(f"Sent turn notification to user {user_id}")
                     
-                    # Notify next user in line
-                    elif position == 1 and not self.was_recently_notified(user_id, "warning"):
+                    # Notify user 10 minutes before their turn
+                    elif position == 1 and not self.was_recently_notified(user_id, "10min"):
                         await context.bot.send_message(
                             chat_id=int(user_id),
-                            text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 15 دقيقة.\n"
+                            text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 10 دقايق.\n"
                                  f"ابدا تقرب للصالون باش ما تخسرش دورك."
                         )
-                        self.save_notification_status(user_id, "warning")
-                        logging.info(f"Sent 15-min warning to user {user_id}")
+                        self.save_notification_status(user_id, "10min")
+                        logging.info(f"Sent 10-min warning to user {user_id}")
+                    
+                    # Notify user 20 minutes before their turn
+                    elif position == 2 and not self.was_recently_notified(user_id, "20min"):
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
+                            text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 20 دقيقة.\n"
+                                 f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                        )
+                        self.save_notification_status(user_id, "20min")
+                        logging.info(f"Sent 20-min warning to user {user_id}")
                 
                 except Exception as e:
                     logging.error(f"Error sending notification to user {user_id}: {str(e)}")
-        
+                    
         except Exception as e:
             logging.error(f"Error in send_notifications: {str(e)}")
 
@@ -204,8 +214,8 @@ async def get_position_and_wait_time(user_id: str):
     if position == -1:
         return None, None
     
-    # Calculate wait time based on position (15 mins for first, +10 mins for each additional position)
-    wait_time = 15 + (position * 10)
+    # Calculate wait time based on number of people ahead (each person = 10 mins)
+    wait_time = (position) * 10
     return position + 1, wait_time
 
 async def choose_barber(update: Update, context):
@@ -612,9 +622,9 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
 
-    # Initialize job queue for notifications
+    # Initialize job queue for notifications with 1-minute interval
     if application.job_queue:
-        application.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
+        application.job_queue.run_repeating(check_and_notify_users, interval=60, first=1)  # Check every minute
         logger.info("Job queue initialized successfully")
     else:
         logger.error("Job queue not available")
