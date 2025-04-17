@@ -186,8 +186,8 @@ notification_service = NotificationService()
 async def start(update: Update, context):
     """Start the conversation and show available options."""
     keyboard = [
-        ["📋 شوف لاشان", "✂️ دير رنديفو"],
-        ["⏳ شحال باقي"]
+        [BTN_VIEW_QUEUE, BTN_BOOK_APPOINTMENT],
+        [BTN_CHECK_WAIT]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
