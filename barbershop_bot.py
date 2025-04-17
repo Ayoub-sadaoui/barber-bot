@@ -387,11 +387,37 @@ def main():
     # Create the Application
     application = Application.builder().token(token).build()
 
+    # Create conversation handler
+    conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber),
+            CommandHandler("admin", admin_panel),
+            MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber)
+        ],
+        states={
+            SELECTING_BARBER: [
+                CallbackQueryHandler(barber_selection, pattern="^barber_")
+            ],
+            ENTERING_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
+            ],
+            ENTERING_PHONE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
+            ],
+            ADMIN_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        name="booking_conversation",
+        persistent=False
+    )
+
     # Register handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_BOOK_APPOINTMENT}$"), choose_barber))
-    application.add_handler(CommandHandler("admin", admin_panel))
-    application.add_handler(MessageHandler(filters.Regex(f"^{BTN_ADD}$"), choose_barber))
+    application.add_handler(conv_handler)  # Add conversation handler
+    
+    # Add regular command handlers
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_QUEUE}$"), check_queue))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_CHECK_WAIT}$"), estimated_wait_time))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_WAITING}$"), view_waiting_bookings))
@@ -399,17 +425,10 @@ def main():
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER1}$"), view_barber_bookings))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_VIEW_BARBER2}$"), view_barber_bookings))
     application.add_handler(MessageHandler(filters.Regex(f"^{BTN_REFRESH}$"), handle_refresh))
-    application.add_handler(CommandHandler("cancel", cancel))
     
-    # Register conversation states
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name), group=1)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone), group=2)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, verify_admin_password), group=3)
-    
-    # Register callback handlers
+    # Add callback query handlers
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
-    application.add_handler(CallbackQueryHandler(barber_selection, pattern="^barber_"))
 
     # Initialize job queue for notifications
     if application.job_queue:
