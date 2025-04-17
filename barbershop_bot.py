@@ -196,6 +196,18 @@ async def check_existing_appointment(user_id: str) -> bool:
     waiting_appointments = sheets_service.get_waiting_bookings()
     return any(appointment[0] == user_id for appointment in waiting_appointments)
 
+async def get_position_and_wait_time(user_id: str):
+    """Get user's position and estimated wait time."""
+    waiting_appointments = sheets_service.get_waiting_bookings()
+    position = next((i for i, row in enumerate(waiting_appointments) if row[0] == user_id), -1)
+    
+    if position == -1:
+        return None, None
+    
+    # Calculate wait time based on position (15 mins for first, +10 mins for each additional position)
+    wait_time = 15 + (position * 10)
+    return position + 1, wait_time
+
 async def choose_barber(update: Update, context):
     """Handle the initial appointment booking request."""
     user_id = str(update.message.chat_id)
@@ -205,10 +217,23 @@ async def choose_barber(update: Update, context):
     
     # If not admin, check for existing appointments
     if not is_admin and await check_existing_appointment(user_id):
-        await update.message.reply_text(
-            "❌ عندك رنديفو فايت.\n"
-            "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
-        )
+        position, wait_time = await get_position_and_wait_time(user_id)
+        if position and wait_time:
+            hours = wait_time // 60
+            minutes = wait_time % 60
+            time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
+            
+            await update.message.reply_text(
+                f"❌ عندك رنديفو فايت.\n"
+                f"🔢 مرتبتك في لاشان: {position}\n"
+                f"⏳ وقت الانتظار المقدر: {time_msg}\n"
+                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+            )
+        else:
+            await update.message.reply_text(
+                "❌ عندك رنديفو فايت.\n"
+                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+            )
         return ConversationHandler.END
     
     keyboard = [
@@ -260,12 +285,19 @@ async def handle_phone(update: Update, context):
 
     booking_data = [user_id, name, phone, barber, datetime.now().strftime("%Y-%m-%d %H:%M"), "Waiting", str(ticket_number)]
     sheets_service.append_booking(booking_data)
+    
+    # Get position and estimated wait time
+    position, wait_time = await get_position_and_wait_time(user_id)
+    hours = wait_time // 60 if wait_time else 0
+    minutes = wait_time % 60 if wait_time else 0
+    time_msg = f"{wait_time} دقيقة" if wait_time and wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
             
     await update.message.reply_text(
         f"✅ تم حجز موعدك!\n"
         f"🎫 رقم تيكيتك: {ticket_number}\n"
         f"💇‍♂️ الحلاق: {barber}\n"
-        f"📋 شوف لاشان باش تعرف مرتبتك"
+        f"🔢 مرتبتك في لاشان: {position}\n"
+        f"⏳ وقت الانتظار المقدر: {time_msg}"
     )
     return ConversationHandler.END
 
@@ -450,19 +482,44 @@ async def check_queue(update: Update, context):
         )
             
 async def estimated_wait_time(update: Update, context):
-    waiting_appointments = sheets_service.get_waiting_bookings()
-    total_waiting = len(waiting_appointments)
+    user_id = str(update.message.chat_id)
+    position, wait_time = await get_position_and_wait_time(user_id)
     
-    if total_waiting == 0:
-        await update.message.reply_text("ما كاين حتى واحد في لاشان. تقدر تحجز توا!")
-    else:
-        estimated_minutes = total_waiting * 10  # Assuming 10 minutes per appointment
-        if estimated_minutes < 60:
-            await update.message.reply_text(f"⏳ تقدير وقت الانتظار: {estimated_minutes} دقيقة")
+    if position is None:
+        waiting_appointments = sheets_service.get_waiting_bookings()
+        if not waiting_appointments:
+            await update.message.reply_text("ما كاين حتى واحد في لاشان. تقدر تحجز توا!")
+            return
+        
+        # For users without appointments, show general queue length
+        total_waiting = len(waiting_appointments)
+        last_wait_time = 15 + ((total_waiting - 1) * 10)
+        hours = last_wait_time // 60
+        minutes = last_wait_time % 60
+        
+        if last_wait_time < 60:
+            await update.message.reply_text(
+                f"⏳ عدد الناس في لاشان: {total_waiting}\n"
+                f"وقت الانتظار تقريبا: {last_wait_time} دقيقة"
+            )
         else:
-            hours = estimated_minutes // 60
-            minutes = estimated_minutes % 60
-            await update.message.reply_text(f"⏳ تقدير وقت الانتظار: {hours} ساعة و {minutes} دقيقة")
+            await update.message.reply_text(
+                f"⏳ عدد الناس في لاشان: {total_waiting}\n"
+                f"وقت الانتظار تقريبا: {hours} ساعة و {minutes} دقيقة"
+            )
+    else:
+        hours = wait_time // 60
+        minutes = wait_time % 60
+        if wait_time < 60:
+            await update.message.reply_text(
+                f"🔢 مرتبتك في لاشان: {position}\n"
+                f"⏳ وقت الانتظار المقدر: {wait_time} دقيقة"
+            )
+        else:
+            await update.message.reply_text(
+                f"🔢 مرتبتك في لاشان: {position}\n"
+                f"⏳ وقت الانتظار المقدر: {hours} ساعة و {minutes} دقيقة"
+            )
 
 async def check_and_notify_users(context):
     try:
