@@ -384,7 +384,7 @@ async def main():
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=True  # Add this to track CallbackQueryHandler for every message
+        per_message=False  # Changed to False since we're using MessageHandler
     )
 
     # Add all handlers
@@ -402,7 +402,6 @@ async def main():
 
     # Initialize job queue for notifications
     if application.job_queue:
-        # Remove the remove_all_jobs() call and directly schedule the job
         application.job_queue.run_repeating(check_and_notify_users, interval=15, first=1)
         logger.info("Job queue initialized successfully")
     else:
@@ -416,9 +415,21 @@ async def main():
         await application.run_polling()
     except Exception as e:
         logger.error(f"Error running bot: {e}")
+        try:
+            await application.stop()
+        except Exception as stop_error:
+            logger.error(f"Error stopping application: {stop_error}")
     finally:
-        await application.stop()
+        try:
+            await application.stop()
+        except Exception as stop_error:
+            logger.error(f"Error stopping application: {stop_error}")
 
 if __name__ == '__main__':
     import asyncio
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}") 
