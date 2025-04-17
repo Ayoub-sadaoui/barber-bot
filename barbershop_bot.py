@@ -300,13 +300,16 @@ async def handle_phone(update: Update, context):
     user_id = str(update.message.chat_id)
     name = context.user_data["name"]
     barber = context.user_data["barber"]
-    ticket_number = sheets_service.generate_ticket_number()
+    
+    # Get current bookings to generate next ticket number
+    all_bookings = sheets_service.get_all_bookings()
+    ticket_number = len(all_bookings)  # This will be 1 for the first booking
 
     booking_data = [user_id, name, phone, barber, datetime.now().strftime("%Y-%m-%d %H:%M"), "Waiting", str(ticket_number)]
     sheets_service.append_booking(booking_data)
     
     # Get position and estimated wait time
-    position, wait_time = await get_position_and_wait_time(user_id)
+    position, wait_time = await get_position_and_wait_time(user_id, barber)
     hours = wait_time // 60 if wait_time else 0
     minutes = wait_time % 60 if wait_time else 0
     time_msg = f"{wait_time} دقيقة" if wait_time and wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
@@ -466,57 +469,98 @@ async def handle_refresh(update: Update, context):
     await update.message.reply_text("🔄 تم تحديث البيانات")
 
 async def check_queue(update: Update, context):
-    user_id = str(update.message.chat_id)
+    # Create keyboard with queue options
+    keyboard = [
+        [InlineKeyboardButton("📋 شوف لاشان كامل", callback_data="view_all_queues")],
+        [InlineKeyboardButton(f"💇‍♂️ شوف لاشان {BARBERS['barber_1']}", callback_data=f"view_queue_{BARBERS['barber_1']}")],
+        [InlineKeyboardButton(f"💇‍♂️ شوف لاشان {BARBERS['barber_2']}", callback_data=f"view_queue_{BARBERS['barber_2']}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Get queues for both barbers
-    barber1_queue = await get_barber_queue(BARBERS['barber_1'])
-    barber2_queue = await get_barber_queue(BARBERS['barber_2'])
+    await update.message.reply_text(
+        "📋 شوف لاشان الحلاقين:",
+        reply_markup=reply_markup
+    )
+
+async def handle_queue_view(update: Update, context):
+    query = update.callback_query
+    await query.answer()
     
-    # Check if user has an appointment with either barber
-    position1, wait_time1 = await get_position_and_wait_time(user_id, BARBERS['barber_1'])
-    position2, wait_time2 = await get_position_and_wait_time(user_id, BARBERS['barber_2'])
+    user_id = str(query.from_user.id)
+    data = query.data
     
-    message = "📋 لاشان الحلاقين:\n\n"
-    
-    # Show queue for Barber 1
-    message += f"💇‍♂️ {BARBERS['barber_1']}:\n"
-    if not barber1_queue:
-        message += "ما كاين حتى واحد في لاشان\n"
+    if data == "view_all_queues":
+        # Show both queues
+        barber1_queue = await get_barber_queue(BARBERS['barber_1'])
+        barber2_queue = await get_barber_queue(BARBERS['barber_2'])
+        
+        message = "📋 لاشان الحلاقين:\n\n"
+        
+        # Show queue for Barber 1
+        message += f"💇‍♂️ {BARBERS['barber_1']}:\n"
+        if not barber1_queue:
+            message += "ما كاين حتى واحد في لاشان\n"
+        else:
+            for i, appointment in enumerate(barber1_queue, 1):
+                status = "👤" if appointment[0] == user_id else "⏳"
+                message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+        
+        message += "\n"
+        
+        # Show queue for Barber 2
+        message += f"💇‍♂️ {BARBERS['barber_2']}:\n"
+        if not barber2_queue:
+            message += "ما كاين حتى واحد في لاشان\n"
+        else:
+            for i, appointment in enumerate(barber2_queue, 1):
+                status = "👤" if appointment[0] == user_id else "⏳"
+                message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+        
+        # Add user's position and wait time if they have an appointment
+        position1, wait_time1 = await get_position_and_wait_time(user_id, BARBERS['barber_1'])
+        position2, wait_time2 = await get_position_and_wait_time(user_id, BARBERS['barber_2'])
+        
+        if position1 is not None:
+            hours1 = wait_time1 // 60
+            minutes1 = wait_time1 % 60
+            time_msg1 = f"{wait_time1} دقيقة" if wait_time1 < 60 else f"{hours1} ساعة و {minutes1} دقيقة"
+            message += f"\n🔢 مرتبتك مع {BARBERS['barber_1']}: {position1}\n"
+            message += f"⏳ وقت الانتظار: {time_msg1}\n"
+        
+        if position2 is not None:
+            hours2 = wait_time2 // 60
+            minutes2 = wait_time2 % 60
+            time_msg2 = f"{wait_time2} دقيقة" if wait_time2 < 60 else f"{hours2} ساعة و {minutes2} دقيقة"
+            message += f"\n🔢 مرتبتك مع {BARBERS['barber_2']}: {position2}\n"
+            message += f"⏳ وقت الانتظار: {time_msg2}\n"
+        
+        if position1 is None and position2 is None:
+            message += "\n❌ ما عندكش رنديفو."
     else:
-        for i, appointment in enumerate(barber1_queue, 1):
-            status = "👤" if appointment[0] == user_id else "⏳"
-            message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+        # Show specific barber's queue
+        barber_name = data.replace("view_queue_", "")
+        barber_queue = await get_barber_queue(barber_name)
+        
+        message = f"📋 لاشان {barber_name}:\n\n"
+        if not barber_queue:
+            message += "ما كاين حتى واحد في لاشان\n"
+        else:
+            for i, appointment in enumerate(barber_queue, 1):
+                status = "👤" if appointment[0] == user_id else "⏳"
+                message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+        
+        # Add user's position and wait time if they have an appointment
+        position, wait_time = await get_position_and_wait_time(user_id, barber_name)
+        if position is not None:
+            hours = wait_time // 60
+            minutes = wait_time % 60
+            time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
+            message += f"\n🔢 مرتبتك: {position}\n"
+            message += f"⏳ وقت الانتظار: {time_msg}\n"
+        else:
+            message += "\n❌ ما عندكش رنديفو مع هذا الحلاق."
     
-    message += "\n"
-    
-    # Show queue for Barber 2
-    message += f"💇‍♂️ {BARBERS['barber_2']}:\n"
-    if not barber2_queue:
-        message += "ما كاين حتى واحد في لاشان\n"
-    else:
-        for i, appointment in enumerate(barber2_queue, 1):
-            status = "👤" if appointment[0] == user_id else "⏳"
-            message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
-    
-    # Add user's position and wait time if they have an appointment
-    if position1 is not None:
-        hours1 = wait_time1 // 60
-        minutes1 = wait_time1 % 60
-        time_msg1 = f"{wait_time1} دقيقة" if wait_time1 < 60 else f"{hours1} ساعة و {minutes1} دقيقة"
-        message += f"\n🔢 مرتبتك مع {BARBERS['barber_1']}: {position1}\n"
-        message += f"⏳ وقت الانتظار: {time_msg1}\n"
-    
-    if position2 is not None:
-        hours2 = wait_time2 // 60
-        minutes2 = wait_time2 % 60
-        time_msg2 = f"{wait_time2} دقيقة" if wait_time2 < 60 else f"{hours2} ساعة و {minutes2} دقيقة"
-        message += f"\n🔢 مرتبتك مع {BARBERS['barber_2']}: {position2}\n"
-        message += f"⏳ وقت الانتظار: {time_msg2}\n"
-    
-    if position1 is None and position2 is None:
-        message += "\n❌ ما عندكش رنديفو."
-    
-    await update.message.reply_text(message)
+    await query.edit_message_text(message)
 
 async def estimated_wait_time(update: Update, context):
     user_id = str(update.message.chat_id)
@@ -647,6 +691,9 @@ def main():
     # Add callback query handlers
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
     application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
+
+    # Add queue view handler
+    application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
 
     # Initialize job queue for notifications with 1-minute interval
     if application.job_queue:
