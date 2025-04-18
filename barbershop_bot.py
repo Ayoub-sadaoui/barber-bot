@@ -547,20 +547,29 @@ async def handle_delete_booking(update: Update, context):
     
     try:
         # Extract ticket number from callback data
-        ticket_number = int(query.data.split('_')[1])
-        logger.info(f"Attempting to delete ticket {ticket_number}")
-        logger.info(f"Callback data: {query.data}")
-        
-        # Delete the booking from the sheet
-        if sheets_service.delete_booking(ticket_number):
-            logger.info("Booking deletion successful")
-            # Show success message
-            await query.edit_message_text("✅ تم حذف الحجز بنجاح")
-            
-            # Refresh the waiting list
-            await view_waiting_bookings(update, context)
+        callback_data_parts = query.data.split('_')
+        if len(callback_data_parts) == 2 and callback_data_parts[0] == 'delete':
+            try:
+                ticket_number = int(callback_data_parts[1])
+                logger.info(f"Attempting to delete ticket {ticket_number}")
+                logger.info(f"Callback data: {query.data}")
+                
+                # Delete the booking from the sheet
+                if sheets_service.delete_booking(ticket_number):
+                    logger.info("Booking deletion successful")
+                    # Show success message
+                    await query.edit_message_text("✅ تم حذف الحجز بنجاح")
+                    
+                    # Refresh the waiting list
+                    await view_waiting_bookings(update, context)
+                else:
+                    logger.error("Failed to delete booking from sheet")
+                    await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
+            except ValueError as ve:
+                logger.error(f"ValueError in extracting ticket number: {ve}")
+                await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
         else:
-            logger.error("Failed to delete booking from sheet")
+            logger.error("Invalid callback data format")
             await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
         
     except Exception as e:
