@@ -406,13 +406,14 @@ async def view_waiting_bookings(update: Update, context):
         message += f"👤 {name}\n"
         message += f"💇‍♂️ {barber}\n"
         message += f"🎫 {ticket}\n"
-        message += "──────────────\n"
         
         # Add management buttons for this appointment
         keyboard.append([
-            InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
-            InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
+            InlineKeyboardButton(f"✅ خلاص", callback_data=f"status_{i}"),
+            InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_{i}")
         ])
+        
+        message += "──────────────\n"
     
     # Add refresh button at the bottom
     keyboard.append([InlineKeyboardButton("🔄 شارجي", callback_data="refresh_waiting")])
@@ -467,8 +468,11 @@ async def handle_status_change(update: Update, context):
         # Extract row index from callback data
         row_index = int(query.data.split('_')[1])
         
+        # Get the actual row number in the sheet (skip header row)
+        sheet_row = row_index + 1
+        
         # Update the status in the sheet
-        sheets_service.update_booking_status(row_index + 1, "Done")  # +1 because sheet is 1-indexed
+        sheets_service.update_booking_status(sheet_row, "Done")
         
         # Show success message
         await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
@@ -494,8 +498,11 @@ async def handle_delete_booking(update: Update, context):
         # Extract row index from callback data
         row_index = int(query.data.split('_')[1])
         
+        # Get the actual row number in the sheet (skip header row)
+        sheet_row = row_index + 1
+        
         # Delete the booking from the sheet
-        sheets_service.delete_booking(row_index + 1)  # +1 because sheet is 1-indexed
+        sheets_service.delete_booking(sheet_row)
         
         # Show success message
         await query.edit_message_text("✅ تم حذف الحجز بنجاح")
