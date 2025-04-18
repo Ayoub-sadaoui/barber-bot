@@ -496,7 +496,6 @@ async def view_barber_bookings(update: Update, context):
     await update.message.reply_text(message)
 
 async def handle_status_change(update: Update, context):
-    """Handle changing appointment status to done."""
     query = update.callback_query
     await query.answer()
     
@@ -513,6 +512,7 @@ async def handle_status_change(update: Update, context):
         
         # Update the status in the sheet
         if sheets_service.update_booking_status(ticket_number, "Done"):
+            logger.info("Status change successful")
             # Show success message
             await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
             
@@ -528,7 +528,6 @@ async def handle_status_change(update: Update, context):
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 async def handle_delete_booking(update: Update, context):
-    """Handle deleting an appointment."""
     query = update.callback_query
     await query.answer()
     
@@ -545,6 +544,7 @@ async def handle_delete_booking(update: Update, context):
         
         # Delete the booking from the sheet
         if sheets_service.delete_booking(ticket_number):
+            logger.info("Booking deletion successful")
             # Show success message
             await query.edit_message_text("✅ تم حذف الحجز بنجاح")
             
