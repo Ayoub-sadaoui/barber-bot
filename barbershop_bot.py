@@ -120,7 +120,7 @@ class NotificationService:
         if key not in self.notification_cache:
             return False
         time_diff = datetime.now().timestamp() - self.notification_cache[key]
-        return time_diff < 300  # 5 minutes cooldown
+        return time_diff < 60  # 5 minutes cooldown
 
     def clear_notifications_for_user(self, user_id: str):
         keys_to_remove = [key for key in self.notification_cache.keys() if key.startswith(f"{user_id}_")]
