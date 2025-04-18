@@ -448,8 +448,8 @@ async def view_waiting_bookings(update: Update, context):
         # Create keyboard for this appointment
         keyboard = [
             [
-                InlineKeyboardButton(f"✅ خلاص", callback_data=f"status_{i}"),
-                InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_{i}")
+                InlineKeyboardButton(f"✅ خلاص", callback_data=f"status_{appointment[6]}"),
+                InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_{appointment[6]}")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
