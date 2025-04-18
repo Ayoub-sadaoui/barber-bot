@@ -693,12 +693,8 @@ def main():
         # Create admin conversation handler
         admin_handler = ConversationHandler(
             entry_points=[
-                CommandHandler("admin", admin_panel),  # Add /admin command
-                MessageHandler(filters.Text([BTN_VIEW_WAITING]), admin_panel),
-                MessageHandler(filters.Text([BTN_VIEW_DONE]), admin_panel),
-                MessageHandler(filters.Text([BTN_VIEW_BARBER1]), admin_panel),
-                MessageHandler(filters.Text([BTN_VIEW_BARBER2]), admin_panel),
-                MessageHandler(filters.Text([BTN_ADD]), admin_panel)
+                CommandHandler("admin", admin_panel),
+                MessageHandler(filters.Text([BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1, BTN_VIEW_BARBER2, BTN_ADD]), admin_panel)
             ],
             states={
                 ADMIN_VERIFICATION: [
@@ -739,6 +735,13 @@ def main():
         # Add regular command handlers
         application.add_handler(MessageHandler(filters.Text([BTN_VIEW_QUEUE]), check_queue))
         application.add_handler(MessageHandler(filters.Text([BTN_CHECK_WAIT]), estimated_wait_time))
+        
+        # Add admin button handlers
+        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_WAITING]), view_waiting_bookings))
+        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_DONE]), view_done_bookings))
+        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_BARBER1, BTN_VIEW_BARBER2]), view_barber_bookings))
+        application.add_handler(MessageHandler(filters.Text([BTN_ADD]), choose_barber))
+        application.add_handler(MessageHandler(filters.Text([BTN_REFRESH]), handle_refresh))
         
         # Add callback query handlers
         application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
