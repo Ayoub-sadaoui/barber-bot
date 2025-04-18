@@ -408,36 +408,33 @@ async def view_waiting_bookings(update: Update, context):
         await update.message.reply_text("ما كاين حتى واحد في لاشان")
         return
 
-    # Create a more readable message
-    message = "📋 لاشان الانتظار:\n\n"
-    keyboard = []
+    # Send header message
+    await update.message.reply_text("📋 لاشان الانتظار:")
     
+    # Send each appointment as a separate message with its own buttons
     for i, appointment in enumerate(waiting_appointments, 1):
         # Format the appointment details
-        position = f"المرتبة: {i}"
-        name = f"الاسم: {appointment[1]}"
-        barber = f"الحلاق: {appointment[3]}"
-        ticket = f"رقم التذكرة: {appointment[6]}"
+        message = f"📍 المرتبة: {i}\n"
+        message += f"👤 الاسم: {appointment[1]}\n"
+        message += f"💇‍♂️ الحلاق: {appointment[3]}\n"
+        message += f"🎫 رقم التذكرة: {appointment[6]}"
         
-        # Add appointment details to message
-        message += f"📍 {position}\n"
-        message += f"👤 {name}\n"
-        message += f"💇‍♂️ {barber}\n"
-        message += f"🎫 {ticket}\n"
+        # Create keyboard for this appointment
+        keyboard = [
+            [
+                InlineKeyboardButton(f"✅ خلاص", callback_data=f"status_{i}"),
+                InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_{i}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Add management buttons for this appointment
-        keyboard.append([
-            InlineKeyboardButton(f"✅ خلاص", callback_data=f"status_{i}"),
-            InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_{i}")
-        ])
-        
-        message += "──────────────\n"
+        # Send message with buttons
+        await update.message.reply_text(message, reply_markup=reply_markup)
     
     # Add refresh button at the bottom
-    keyboard.append([InlineKeyboardButton("🔄 شارجي", callback_data="refresh_waiting")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(message, reply_markup=reply_markup)
+    refresh_keyboard = [[InlineKeyboardButton("🔄 شارجي", callback_data="refresh_waiting")]]
+    refresh_markup = InlineKeyboardMarkup(refresh_keyboard)
+    await update.message.reply_text("──────────────", reply_markup=refresh_markup)
 
 async def view_done_bookings(update: Update, context):
     if not await is_admin(str(update.message.chat_id), context):
