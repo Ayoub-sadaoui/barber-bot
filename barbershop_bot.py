@@ -116,9 +116,9 @@ class NotificationService:
         self.notification_cache[f"{user_id}_{notification_type}"] = datetime.now().timestamp()
 
     def was_recently_notified(self, user_id: str, notification_type: str) -> bool:
-    key = f"{user_id}_{notification_type}"
+        key = f"{user_id}_{notification_type}"
         if key not in self.notification_cache:
-        return False
+            return False
         time_diff = datetime.now().timestamp() - self.notification_cache[key]
         return time_diff < 300  # 5 minutes cooldown
 
@@ -130,54 +130,54 @@ class NotificationService:
     async def send_notifications(self, context, waiting_appointments):
         try:
             # Clean up old notifications
-        current_user_ids = [appointment[0] for appointment in waiting_appointments]
+            current_user_ids = [appointment[0] for appointment in waiting_appointments]
             for key in list(self.notification_cache.keys()):
-            user_id = key.split('_')[0]
-            if user_id not in current_user_ids:
+                user_id = key.split('_')[0]
+                if user_id not in current_user_ids:
                     del self.notification_cache[key]
         
             # Send notifications to users
-        for position, appointment in enumerate(waiting_appointments):
-            user_id = appointment[0]
-            user_name = appointment[1]
-            barber = appointment[3]
-            
-            try:
+            for position, appointment in enumerate(waiting_appointments):
+                user_id = appointment[0]
+                user_name = appointment[1]
+                barber = appointment[3]
+                
+                try:
                     # Notify user when it's their turn
                     if position == 0 and not self.was_recently_notified(user_id, "turn"):
-                    await context.bot.send_message(
-                        chat_id=int(user_id),
-                        text=f"🎉 {user_name}، دورك توا!\n"
-                             f"روح لـ {barber}.\n"
-                             f"إذا ما جيتش في 5 دقايق، تقدر تخسر دورك."
-                    )
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
+                            text=f"🎉 {user_name}، دورك توا!\n"
+                                 f"روح لـ {barber}.\n"
+                                 f"إذا ما جيتش في 5 دقايق، تقدر تخسر دورك."
+                        )
                         self.save_notification_status(user_id, "turn")
-                    logging.info(f"Sent turn notification to user {user_id}")
-                
+                        logging.info(f"Sent turn notification to user {user_id}")
+                    
                     # Notify user 10 minutes before their turn
                     elif position == 1 and not self.was_recently_notified(user_id, "10min"):
-                    await context.bot.send_message(
-                        chat_id=int(user_id),
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
                             text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 10 دقايق.\n"
-                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
-                    )
+                                 f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                        )
                         self.save_notification_status(user_id, "10min")
                         logging.info(f"Sent 10-min warning to user {user_id}")
-                
+                    
                     # Notify user 20 minutes before their turn
                     elif position == 2 and not self.was_recently_notified(user_id, "20min"):
-                    await context.bot.send_message(
-                        chat_id=int(user_id),
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
                             text=f"🔔 {user_name}! دورك قريب يجي مع {barber} في 20 دقيقة.\n"
-                             f"ابدا تقرب للصالون باش ما تخسرش دورك."
-                    )
+                                 f"ابدا تقرب للصالون باش ما تخسرش دورك."
+                        )
                         self.save_notification_status(user_id, "20min")
                         logging.info(f"Sent 20-min warning to user {user_id}")
                 
-            except Exception as e:
+                except Exception as e:
                     logging.error(f"Error sending notification to user {user_id}: {str(e)}")
                     
-    except Exception as e:
+        except Exception as e:
             logging.error(f"Error in send_notifications: {str(e)}")
 
 # Initialize services
@@ -202,7 +202,7 @@ async def start(update: Update, context):
 
 async def cancel(update: Update, context):
     await update.message.reply_text("تم إلغاء الحجز. يمكنك حجز موعد جديد في أي وقت.")
-        return ConversationHandler.END
+    return ConversationHandler.END
     
 async def check_existing_appointment(user_id: str) -> bool:
     """Check if user already has an active appointment."""
@@ -301,7 +301,7 @@ async def handle_phone(update: Update, context):
         return ENTERING_PHONE
     
     context.user_data["phone"] = phone
-        user_id = str(update.message.chat_id)
+    user_id = str(update.message.chat_id)
     name = context.user_data["name"]
     barber = context.user_data["barber"]
     
@@ -318,7 +318,7 @@ async def handle_phone(update: Update, context):
     minutes = wait_time % 60 if wait_time else 0
     time_msg = f"{wait_time} دقيقة" if wait_time and wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
             
-            await update.message.reply_text(
+    await update.message.reply_text(
         f"✅ تم حجز موعدك!\n"
         f"🎫 رقم تيكيتك: {ticket_number}\n"
         f"💇‍♂️ الحلاق: {barber}\n"
@@ -458,7 +458,7 @@ async def handle_delete_booking(update: Update, context):
         waiting_appointments = sheets_service.get_waiting_bookings()
         if not waiting_appointments:
             await query.message.reply_text("ما كاين حتى واحد في لاشان")
-                return
+            return
         
         message = "⏳ لي راهم يستناو:\n\n"
         keyboard = []
@@ -589,7 +589,7 @@ async def estimated_wait_time(update: Update, context):
     message += f"💇‍♂️ {BARBERS['barber_1']}:\n"
     if not barber1_queue:
         message += "ما كاين حتى واحد في لاشان\n"
-            else:
+    else:
         for i, appointment in enumerate(barber1_queue, 1):
             wait_time = (i - 1) * 10
             hours = wait_time // 60
