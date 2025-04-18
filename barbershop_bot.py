@@ -327,9 +327,29 @@ async def handle_phone(update: Update, context):
     )
     return ConversationHandler.END
 
+async def is_admin(user_id: str, context) -> bool:
+    """Check if user is an admin."""
+    return context.user_data.get('is_admin', False)
+
 async def admin_panel(update: Update, context):
     """Handle the admin panel request."""
     logger.info(f"Admin panel requested by user {update.message.chat_id}")
+    
+    # Check if user is already authenticated as admin
+    if await is_admin(str(update.message.chat_id), context):
+        keyboard = [
+            [BTN_VIEW_WAITING, BTN_VIEW_DONE],
+            [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
+            [BTN_ADD, BTN_REFRESH]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "👋 مرحبا بيك في لوحة التحكم:",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+    
+    # If not authenticated, ask for password
     await update.message.reply_text("🔐 كتب كلمة السر:")
     return ADMIN_VERIFICATION
 
@@ -342,7 +362,10 @@ async def verify_admin_password(update: Update, context):
         await update.message.reply_text("❌ كلمة السر ماشي صحيحة.")
         return ConversationHandler.END
     
+    # Set admin status in user_data
+    context.user_data['is_admin'] = True
     logger.info(f"Successful admin login by user {update.message.chat_id}")
+    
     keyboard = [
         [BTN_VIEW_WAITING, BTN_VIEW_DONE],
         [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
@@ -356,6 +379,11 @@ async def verify_admin_password(update: Update, context):
     return ConversationHandler.END
 
 async def view_waiting_bookings(update: Update, context):
+    # Check if user is admin
+    if not await is_admin(str(update.message.chat_id), context):
+        await update.message.reply_text("❌ ما عندكش الصلاحيات باش تشوف هاد الصفحة.")
+        return
+
     waiting_appointments = sheets_service.get_waiting_bookings()
     if not waiting_appointments:
         await update.message.reply_text("ما كاين حتى واحد في لاشان")
@@ -364,25 +392,25 @@ async def view_waiting_bookings(update: Update, context):
     message = "⏳ لي راهم يستناو:\n\n"
     keyboard = []
     
-    # Only show management buttons for admin
-    is_admin_view = update.message.text == BTN_VIEW_WAITING
-    
     for i, appointment in enumerate(waiting_appointments, 1):
         message += f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}\n"
-        if is_admin_view:
-            # Add status change and delete buttons for each appointment
-            keyboard.append([
-                InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
-                InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
-            ])
+        # Add status change and delete buttons for each appointment
+        keyboard.append([
+            InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
+            InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
+        ])
     
-    if is_admin_view and keyboard:
+    if keyboard:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(message, reply_markup=reply_markup)
     else:
         await update.message.reply_text(message)
 
 async def view_done_bookings(update: Update, context):
+    if not await is_admin(str(update.message.chat_id), context):
+        await update.message.reply_text("❌ ما عندكش الصلاحيات باش تشوف هاد الصفحة.")
+        return
+    
     done_appointments = sheets_service.get_done_bookings()
     if not done_appointments:
         await update.message.reply_text("ما كاين حتى واحد خلص")
@@ -394,6 +422,10 @@ async def view_done_bookings(update: Update, context):
     await update.message.reply_text(message)
 
 async def view_barber_bookings(update: Update, context):
+    if not await is_admin(str(update.message.chat_id), context):
+        await update.message.reply_text("❌ ما عندكش الصلاحيات باش تشوف هاد الصفحة.")
+        return
+    
     barber_name = BARBERS["barber_1"] if update.message.text == BTN_VIEW_BARBER1 else BARBERS["barber_2"]
     barber_appointments = sheets_service.get_barber_bookings(barber_name)
     
