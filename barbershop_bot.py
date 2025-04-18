@@ -65,7 +65,8 @@ class SheetsService:
     def refresh_connection(self):
         try:
             self.sheet.get_all_values()
-    except Exception:
+        except Exception as e:
+            logger.error(f"Error refreshing connection: {e}")
             creds_dict = json.loads(GOOGLE_CREDS_JSON)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(
                 creds_dict, 
