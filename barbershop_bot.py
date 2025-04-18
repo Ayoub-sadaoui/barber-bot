@@ -90,18 +90,23 @@ class SheetsService:
             # Get all values to find the correct row
             all_values = self.sheet.get_all_values()
             logger.info(f"All values in sheet: {all_values}")
+            logger.info(f"Looking for row with index {row_index}")
             
             # Find the row with matching ticket number
             for i, row in enumerate(all_values[1:], start=2):  # Skip header row
+                logger.info(f"Checking row {i}: {row}")
                 if str(row[6]) == str(row_index):  # Check ticket number column
                     logger.info(f"Found matching row at index {i}")
+                    logger.info(f"Updating status to {status}")
                     self.sheet.update_cell(i, 6, status)  # Update status column
+                    logger.info("Status updated successfully")
                     return True
             
             logger.error(f"No matching row found for ticket {row_index}")
             return False
         except Exception as e:
-            logger.error(f"Error updating status: {e}")
+            logger.error(f"Error updating status: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
             return False
 
     def delete_booking(self, row_index):
@@ -111,18 +116,23 @@ class SheetsService:
             # Get all values to find the correct row
             all_values = self.sheet.get_all_values()
             logger.info(f"All values in sheet: {all_values}")
+            logger.info(f"Looking for row with index {row_index}")
             
             # Find the row with matching ticket number
             for i, row in enumerate(all_values[1:], start=2):  # Skip header row
+                logger.info(f"Checking row {i}: {row}")
                 if str(row[6]) == str(row_index):  # Check ticket number column
                     logger.info(f"Found matching row at index {i}")
+                    logger.info("Deleting row")
                     self.sheet.delete_rows(i)
+                    logger.info("Row deleted successfully")
                     return True
             
             logger.error(f"No matching row found for ticket {row_index}")
             return False
         except Exception as e:
-            logger.error(f"Error deleting booking: {e}")
+            logger.error(f"Error deleting booking: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
             return False
 
     def get_waiting_bookings(self):
@@ -499,6 +509,7 @@ async def handle_status_change(update: Update, context):
         # Extract ticket number from callback data
         ticket_number = int(query.data.split('_')[1])
         logger.info(f"Attempting to change status for ticket {ticket_number}")
+        logger.info(f"Callback data: {query.data}")
         
         # Update the status in the sheet
         if sheets_service.update_booking_status(ticket_number, "Done"):
@@ -508,10 +519,12 @@ async def handle_status_change(update: Update, context):
             # Refresh the waiting list
             await view_waiting_bookings(update, context)
         else:
+            logger.error("Failed to update status in sheet")
             await query.edit_message_text("❌ عندنا مشكل في تغيير الحالة. حاول مرة أخرى.")
         
     except Exception as e:
-        logger.error(f"Error changing status: {e}")
+        logger.error(f"Error in handle_status_change: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 async def handle_delete_booking(update: Update, context):
@@ -528,6 +541,7 @@ async def handle_delete_booking(update: Update, context):
         # Extract ticket number from callback data
         ticket_number = int(query.data.split('_')[1])
         logger.info(f"Attempting to delete ticket {ticket_number}")
+        logger.info(f"Callback data: {query.data}")
         
         # Delete the booking from the sheet
         if sheets_service.delete_booking(ticket_number):
@@ -537,10 +551,12 @@ async def handle_delete_booking(update: Update, context):
             # Refresh the waiting list
             await view_waiting_bookings(update, context)
         else:
+            logger.error("Failed to delete booking from sheet")
             await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
         
     except Exception as e:
-        logger.error(f"Error deleting booking: {e}")
+        logger.error(f"Error in handle_delete_booking: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 async def handle_refresh(update: Update, context):
