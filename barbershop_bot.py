@@ -690,11 +690,10 @@ def main():
         # Create the Application with proper error handling
         application = Application.builder().token(token).build()
 
-        # Create admin conversation handler
+        # Create admin conversation handler (only for /admin command and initial password)
         admin_handler = ConversationHandler(
             entry_points=[
-                CommandHandler("admin", admin_panel),
-                MessageHandler(filters.Text([BTN_VIEW_WAITING, BTN_VIEW_DONE, BTN_VIEW_BARBER1, BTN_VIEW_BARBER2, BTN_ADD]), admin_panel)
+                CommandHandler("admin", admin_panel)
             ],
             states={
                 ADMIN_VERIFICATION: [
@@ -729,19 +728,21 @@ def main():
 
         # Register handlers in the correct order
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(admin_handler)  # Add admin handler first
-        application.add_handler(booking_handler)
         
-        # Add regular command handlers
-        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_QUEUE]), check_queue))
-        application.add_handler(MessageHandler(filters.Text([BTN_CHECK_WAIT]), estimated_wait_time))
-        
-        # Add admin button handlers
+        # Add admin button handlers first (before the conversation handlers)
         application.add_handler(MessageHandler(filters.Text([BTN_VIEW_WAITING]), view_waiting_bookings))
         application.add_handler(MessageHandler(filters.Text([BTN_VIEW_DONE]), view_done_bookings))
         application.add_handler(MessageHandler(filters.Text([BTN_VIEW_BARBER1, BTN_VIEW_BARBER2]), view_barber_bookings))
         application.add_handler(MessageHandler(filters.Text([BTN_ADD]), choose_barber))
         application.add_handler(MessageHandler(filters.Text([BTN_REFRESH]), handle_refresh))
+        
+        # Add conversation handlers
+        application.add_handler(admin_handler)
+        application.add_handler(booking_handler)
+        
+        # Add regular command handlers
+        application.add_handler(MessageHandler(filters.Text([BTN_VIEW_QUEUE]), check_queue))
+        application.add_handler(MessageHandler(filters.Text([BTN_CHECK_WAIT]), estimated_wait_time))
         
         # Add callback query handlers
         application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
