@@ -661,7 +661,12 @@ def main():
         # Create admin conversation handler
         admin_handler = ConversationHandler(
             entry_points=[
-                MessageHandler(filters.Text([BTN_VIEW_WAITING]), admin_panel)
+                CommandHandler("admin", admin_panel),  # Add /admin command
+                MessageHandler(filters.Text([BTN_VIEW_WAITING]), admin_panel),
+                MessageHandler(filters.Text([BTN_VIEW_DONE]), admin_panel),
+                MessageHandler(filters.Text([BTN_VIEW_BARBER1]), admin_panel),
+                MessageHandler(filters.Text([BTN_VIEW_BARBER2]), admin_panel),
+                MessageHandler(filters.Text([BTN_ADD]), admin_panel)
             ],
             states={
                 ADMIN_VERIFICATION: [
@@ -676,8 +681,7 @@ def main():
         # Create booking conversation handler
         booking_handler = ConversationHandler(
             entry_points=[
-                MessageHandler(filters.Text([BTN_BOOK_APPOINTMENT]), handle_booking_button),
-                MessageHandler(filters.Text([BTN_ADD]), choose_barber)
+                MessageHandler(filters.Text([BTN_BOOK_APPOINTMENT]), handle_booking_button)
             ],
             states={
                 SELECTING_BARBER: [
@@ -697,7 +701,7 @@ def main():
 
         # Register handlers in the correct order
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(admin_handler)  # Add admin handler before booking handler
+        application.add_handler(admin_handler)  # Add admin handler first
         application.add_handler(booking_handler)
         
         # Add regular command handlers
