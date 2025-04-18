@@ -87,11 +87,19 @@ class SheetsService:
         """Update the status of a booking in the sheet."""
         self.refresh_connection()
         try:
-            # Add 2 to row_index to account for header row and 1-based indexing
-            actual_row = row_index + 2
-            logger.info(f"Updating status for row {actual_row} to {status}")
-            self.sheet.update_cell(actual_row, 6, status)
-            return True
+            # Get all values to find the correct row
+            all_values = self.sheet.get_all_values()
+            logger.info(f"All values in sheet: {all_values}")
+            
+            # Find the row with matching ticket number
+            for i, row in enumerate(all_values[1:], start=2):  # Skip header row
+                if str(row[6]) == str(row_index):  # Check ticket number column
+                    logger.info(f"Found matching row at index {i}")
+                    self.sheet.update_cell(i, 6, status)  # Update status column
+                    return True
+            
+            logger.error(f"No matching row found for ticket {row_index}")
+            return False
         except Exception as e:
             logger.error(f"Error updating status: {e}")
             return False
@@ -100,11 +108,19 @@ class SheetsService:
         """Delete a booking from the sheet."""
         self.refresh_connection()
         try:
-            # Add 2 to row_index to account for header row and 1-based indexing
-            actual_row = row_index + 2
-            logger.info(f"Deleting row {actual_row}")
-            self.sheet.delete_rows(actual_row)
-            return True
+            # Get all values to find the correct row
+            all_values = self.sheet.get_all_values()
+            logger.info(f"All values in sheet: {all_values}")
+            
+            # Find the row with matching ticket number
+            for i, row in enumerate(all_values[1:], start=2):  # Skip header row
+                if str(row[6]) == str(row_index):  # Check ticket number column
+                    logger.info(f"Found matching row at index {i}")
+                    self.sheet.delete_rows(i)
+                    return True
+            
+            logger.error(f"No matching row found for ticket {row_index}")
+            return False
         except Exception as e:
             logger.error(f"Error deleting booking: {e}")
             return False
@@ -480,12 +496,12 @@ async def handle_status_change(update: Update, context):
         return
     
     try:
-        # Extract row index from callback data
-        row_index = int(query.data.split('_')[1])
-        logger.info(f"Attempting to change status for appointment at index {row_index}")
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[1])
+        logger.info(f"Attempting to change status for ticket {ticket_number}")
         
         # Update the status in the sheet
-        if sheets_service.update_booking_status(row_index, "Done"):
+        if sheets_service.update_booking_status(ticket_number, "Done"):
             # Show success message
             await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
             
@@ -509,12 +525,12 @@ async def handle_delete_booking(update: Update, context):
         return
     
     try:
-        # Extract row index from callback data
-        row_index = int(query.data.split('_')[1])
-        logger.info(f"Attempting to delete appointment at index {row_index}")
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[1])
+        logger.info(f"Attempting to delete ticket {ticket_number}")
         
         # Delete the booking from the sheet
-        if sheets_service.delete_booking(row_index):
+        if sheets_service.delete_booking(ticket_number):
             # Show success message
             await query.edit_message_text("✅ تم حذف الحجز بنجاح")
             
