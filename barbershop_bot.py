@@ -84,12 +84,30 @@ class SheetsService:
         self.sheet.append_row(booking_data)
 
     def update_booking_status(self, row_index, status):
+        """Update the status of a booking in the sheet."""
         self.refresh_connection()
-        self.sheet.update_cell(row_index, 6, status)
+        try:
+            # Add 2 to row_index to account for header row and 1-based indexing
+            actual_row = row_index + 2
+            logger.info(f"Updating status for row {actual_row} to {status}")
+            self.sheet.update_cell(actual_row, 6, status)
+            return True
+        except Exception as e:
+            logger.error(f"Error updating status: {e}")
+            return False
 
     def delete_booking(self, row_index):
+        """Delete a booking from the sheet."""
         self.refresh_connection()
-        self.sheet.delete_rows(row_index)
+        try:
+            # Add 2 to row_index to account for header row and 1-based indexing
+            actual_row = row_index + 2
+            logger.info(f"Deleting row {actual_row}")
+            self.sheet.delete_rows(actual_row)
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting booking: {e}")
+            return False
 
     def get_waiting_bookings(self):
         bookings = self.get_all_bookings()
@@ -467,18 +485,17 @@ async def handle_status_change(update: Update, context):
     try:
         # Extract row index from callback data
         row_index = int(query.data.split('_')[1])
-        
-        # Get the actual row number in the sheet (skip header row)
-        sheet_row = row_index + 1
+        logger.info(f"Attempting to change status for appointment at index {row_index}")
         
         # Update the status in the sheet
-        sheets_service.update_booking_status(sheet_row, "Done")
-        
-        # Show success message
-        await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
-        
-        # Refresh the waiting list
-        await view_waiting_bookings(update, context)
+        if sheets_service.update_booking_status(row_index, "Done"):
+            # Show success message
+            await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
+            
+            # Refresh the waiting list
+            await view_waiting_bookings(update, context)
+        else:
+            await query.edit_message_text("❌ عندنا مشكل في تغيير الحالة. حاول مرة أخرى.")
         
     except Exception as e:
         logger.error(f"Error changing status: {e}")
@@ -497,18 +514,17 @@ async def handle_delete_booking(update: Update, context):
     try:
         # Extract row index from callback data
         row_index = int(query.data.split('_')[1])
-        
-        # Get the actual row number in the sheet (skip header row)
-        sheet_row = row_index + 1
+        logger.info(f"Attempting to delete appointment at index {row_index}")
         
         # Delete the booking from the sheet
-        sheets_service.delete_booking(sheet_row)
-        
-        # Show success message
-        await query.edit_message_text("✅ تم حذف الحجز بنجاح")
-        
-        # Refresh the waiting list
-        await view_waiting_bookings(update, context)
+        if sheets_service.delete_booking(row_index):
+            # Show success message
+            await query.edit_message_text("✅ تم حذف الحجز بنجاح")
+            
+            # Refresh the waiting list
+            await view_waiting_bookings(update, context)
+        else:
+            await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
         
     except Exception as e:
         logger.error(f"Error deleting booking: {e}")
