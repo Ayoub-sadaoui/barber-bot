@@ -472,10 +472,19 @@ async def view_done_bookings(update: Update, context):
         await update.message.reply_text("ما كاين حتى واحد خلص")
         return
 
-    message = "✅ لي خلصو:\n\n"
+    # Send header message
+    await update.message.reply_text("✅ لي خلصو:")
+
+    # Send each completed appointment with a delete button
     for i, appointment in enumerate(done_appointments, 1):
-        message += f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}\n"
-    await update.message.reply_text(message)
+        message = f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}"
+        
+        # Create keyboard with delete button
+        keyboard = [[InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_done_{appointment[6]}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Send message with delete button
+        await update.message.reply_text(message, reply_markup=reply_markup)
 
 async def view_barber_bookings(update: Update, context):
     if not await is_admin(str(update.message.chat_id), context):
@@ -725,6 +734,38 @@ async def cancel_callback(update: Update, context):
     await cancel(update, context)
     return ConversationHandler.END
 
+async def handle_delete_done_booking(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    if not await is_admin(str(query.from_user.id), context):
+        await query.edit_message_text("❌ ما عندكش الصلاحيات باش تمسح الحجز.")
+        return
+    
+    try:
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[2])
+        logger.info(f"Attempting to delete done ticket {ticket_number}")
+        logger.info(f"Callback data: {query.data}")
+        
+        # Delete the booking from the sheet
+        if sheets_service.delete_booking(ticket_number):
+            logger.info("Done booking deletion successful")
+            # Show success message
+            await query.edit_message_text("✅ تم حذف الحجز بنجاح")
+            
+            # Refresh the done list
+            await view_done_bookings(update, context)
+        else:
+            logger.error("Failed to delete done booking from sheet")
+            await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
+        
+    except Exception as e:
+        logger.error(f"Error in handle_delete_done_booking: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+
 # Modify the main function to fix the event loop issue
 def main():
     """Set up and run the bot."""
@@ -796,6 +837,7 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_"))
         application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_"))
         application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
+        application.add_handler(CallbackQueryHandler(handle_delete_done_booking, pattern="^delete_done_"))
 
         # Initialize job queue for notifications with 1-minute interval
         if application.job_queue:
