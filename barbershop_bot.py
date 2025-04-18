@@ -379,6 +379,7 @@ async def verify_admin_password(update: Update, context):
     return ConversationHandler.END
 
 async def view_waiting_bookings(update: Update, context):
+    """Show waiting appointments with management options."""
     # Check if user is admin
     if not await is_admin(str(update.message.chat_id), context):
         await update.message.reply_text("❌ ما عندكش الصلاحيات باش تشوف هاد الصفحة.")
@@ -389,22 +390,35 @@ async def view_waiting_bookings(update: Update, context):
         await update.message.reply_text("ما كاين حتى واحد في لاشان")
         return
 
-    message = "⏳ لي راهم يستناو:\n\n"
+    # Create a more readable message
+    message = "📋 لاشان الانتظار:\n\n"
     keyboard = []
     
     for i, appointment in enumerate(waiting_appointments, 1):
-        message += f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}\n"
-        # Add status change and delete buttons for each appointment
+        # Format the appointment details
+        position = f"المرتبة: {i}"
+        name = f"الاسم: {appointment[1]}"
+        barber = f"الحلاق: {appointment[3]}"
+        ticket = f"رقم التذكرة: {appointment[6]}"
+        
+        # Add appointment details to message
+        message += f"📍 {position}\n"
+        message += f"👤 {name}\n"
+        message += f"💇‍♂️ {barber}\n"
+        message += f"🎫 {ticket}\n"
+        message += "──────────────\n"
+        
+        # Add management buttons for this appointment
         keyboard.append([
             InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
             InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
         ])
     
-    if keyboard:
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(message, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(message)
+    # Add refresh button at the bottom
+    keyboard.append([InlineKeyboardButton("🔄 شارجي", callback_data="refresh_waiting")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
 
 async def view_done_bookings(update: Update, context):
     if not await is_admin(str(update.message.chat_id), context):
@@ -440,72 +454,54 @@ async def view_barber_bookings(update: Update, context):
     await update.message.reply_text(message)
 
 async def handle_status_change(update: Update, context):
+    """Handle changing appointment status to done."""
     query = update.callback_query
     await query.answer()
     
-    # Extract row index from callback data
-    row_index = int(query.data.split('_')[1])
+    # Check if user is admin
+    if not await is_admin(str(query.from_user.id), context):
+        await query.edit_message_text("❌ ما عندكش الصلاحيات باش تغير الحالة.")
+        return
     
     try:
-        sheets_service.update_booking_status(row_index, "Done")
-        await query.edit_message_text("✅ تم تغيير الحالة")
+        # Extract row index from callback data
+        row_index = int(query.data.split('_')[1])
         
-        # Refresh the waiting list view
-        waiting_appointments = sheets_service.get_waiting_bookings()
-        if not waiting_appointments:
-            await query.message.reply_text("ما كاين حتى واحد في لاشان")
-            return
+        # Update the status in the sheet
+        sheets_service.update_booking_status(row_index + 1, "Done")  # +1 because sheet is 1-indexed
         
-        message = "⏳ لي راهم يستناو:\n\n"
-        keyboard = []
-        for i, appointment in enumerate(waiting_appointments, 1):
-            message += f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}\n"
-            keyboard.append([
-                InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
-                InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
-            ])
+        # Show success message
+        await query.edit_message_text("✅ تم تغيير الحالة بنجاح")
         
-        if keyboard:
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text(message, reply_markup=reply_markup)
-        else:
-            await query.message.reply_text(message)
-            
+        # Refresh the waiting list
+        await view_waiting_bookings(update, context)
+        
     except Exception as e:
         logger.error(f"Error changing status: {e}")
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 async def handle_delete_booking(update: Update, context):
+    """Handle deleting an appointment."""
     query = update.callback_query
     await query.answer()
     
-    # Extract row index from callback data
-    row_index = int(query.data.split('_')[1])
+    # Check if user is admin
+    if not await is_admin(str(query.from_user.id), context):
+        await query.edit_message_text("❌ ما عندكش الصلاحيات باش تمسح الحجز.")
+        return
     
     try:
-        sheets_service.delete_booking(row_index)
-        await query.edit_message_text("❌ تم حذف الحجز")
+        # Extract row index from callback data
+        row_index = int(query.data.split('_')[1])
         
-        # Refresh the waiting list view
-        waiting_appointments = sheets_service.get_waiting_bookings()
-        if not waiting_appointments:
-            await query.message.reply_text("ما كاين حتى واحد في لاشان")
-            return
+        # Delete the booking from the sheet
+        sheets_service.delete_booking(row_index + 1)  # +1 because sheet is 1-indexed
         
-        message = "⏳ لي راهم يستناو:\n\n"
-        keyboard = []
-        for i, appointment in enumerate(waiting_appointments, 1):
-            message += f"{i}. {appointment[1]} - {appointment[3]} - رقم: {appointment[6]}\n"
-            keyboard.append([
-                InlineKeyboardButton(f"✅ خلاص - {appointment[1]}", callback_data=f"status_{i}"),
-                InlineKeyboardButton(f"❌ امسح - {appointment[1]}", callback_data=f"delete_{i}")
-            ])
+        # Show success message
+        await query.edit_message_text("✅ تم حذف الحجز بنجاح")
         
-        if keyboard:
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text(message, reply_markup=reply_markup)
-        else:
-            await query.message.reply_text(message)
+        # Refresh the waiting list
+        await view_waiting_bookings(update, context)
         
     except Exception as e:
         logger.error(f"Error deleting booking: {e}")
