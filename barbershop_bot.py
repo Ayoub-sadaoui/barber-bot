@@ -246,6 +246,7 @@ async def start(update: Update, context):
     # Add management buttons if user has an active booking
     if user_booking:
         keyboard.append([BTN_DELETE, BTN_CHANGE_STATUS])
+        logger.info(f"User {user_id} has an active booking, showing management buttons")
     
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
@@ -383,16 +384,19 @@ async def handle_phone(update: Update, context):
 async def handle_delete_request(update: Update, context):
     """Handle the delete button press from the main menu."""
     user_id = str(update.message.chat_id)
+    logger.info(f"Delete request from user {user_id}")
     
     # Get user's active booking
     waiting_appointments = sheets_service.get_waiting_bookings()
     user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
     
     if not user_booking:
+        logger.warning(f"User {user_id} tried to delete but has no active booking")
         await update.message.reply_text("❌ ما عندكش حجز نشط.")
         return
     
     ticket_number = user_booking[6]
+    logger.info(f"Found active booking for user {user_id} with ticket {ticket_number}")
     
     # Create confirmation keyboard
     keyboard = [
@@ -412,23 +416,28 @@ async def handle_delete_request(update: Update, context):
 async def handle_done_request(update: Update, context):
     """Handle the done button press from the main menu."""
     user_id = str(update.message.chat_id)
+    logger.info(f"Done request from user {user_id}")
     
     # Get user's active booking
     waiting_appointments = sheets_service.get_waiting_bookings()
     user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
     
     if not user_booking:
+        logger.warning(f"User {user_id} tried to mark as done but has no active booking")
         await update.message.reply_text("❌ ما عندكش حجز نشط.")
         return
     
     ticket_number = user_booking[6]
+    logger.info(f"Found active booking for user {user_id} with ticket {ticket_number}")
     
     # Update the status in the sheet
     if sheets_service.update_booking_status(ticket_number, "Done"):
+        logger.info(f"Successfully marked booking {ticket_number} as done")
         await update.message.reply_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
         # Refresh the menu to remove the buttons
         await start(update, context)
     else:
+        logger.error(f"Failed to mark booking {ticket_number} as done")
         await update.message.reply_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
 
 async def is_admin(user_id: str, context) -> bool:
