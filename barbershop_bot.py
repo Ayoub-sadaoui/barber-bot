@@ -232,7 +232,8 @@ async def start(update: Update, context):
     logger.info(f"Start command received from user {update.message.chat_id}")
     keyboard = [
         [BTN_VIEW_QUEUE, BTN_BOOK_APPOINTMENT],
-        [BTN_CHECK_WAIT]
+        [BTN_CHECK_WAIT],
+        [BTN_DELETE, BTN_CHANGE_STATUS]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
@@ -354,89 +355,67 @@ async def handle_phone(update: Update, context):
     hours = wait_time // 60 if wait_time else 0
     minutes = wait_time % 60 if wait_time else 0
     time_msg = f"{wait_time} دقيقة" if wait_time and wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
-    
-    # Create keyboard with management buttons
-    keyboard = [
-        [
-            InlineKeyboardButton("❌ امسح الحجز", callback_data=f"client_delete_{ticket_number}"),
-            InlineKeyboardButton("✅ خلصت", callback_data=f"client_done_{ticket_number}")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
                 
     await update.message.reply_text(
         f"✅ تم حجز موعدك!\n"
         f"🎫 رقم تيكيتك: {ticket_number}\n"
         f"💇‍♂️ الحلاق: {barber}\n"
         f"🔢 مرتبتك في لاشان: {position}\n"
-        f"⏳ وقت الانتظار المقدر: {time_msg}",
-        reply_markup=reply_markup
+        f"⏳ وقت الانتظار المقدر: {time_msg}\n\n"
+        f"يمكنك إدارة حجزك من القائمة الرئيسية باستخدام الأزرار:"
+        f"\n❌ امسح الحجز - لحذف الحجز"
+        f"\n✅ خلاص - لتحديث حالة الحجز"
     )
     return ConversationHandler.END
 
-async def handle_client_delete(update: Update, context):
-    query = update.callback_query
-    await query.answer()
+async def handle_delete_request(update: Update, context):
+    """Handle the delete button press from the main menu."""
+    user_id = str(update.message.chat_id)
     
-    try:
-        # Extract ticket number from callback data
-        ticket_number = int(query.data.split('_')[2])
-        
-        # Create confirmation keyboard
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ نعم", callback_data=f"confirm_delete_{ticket_number}"),
-                InlineKeyboardButton("❌ لا", callback_data=f"cancel_delete_{ticket_number}")
-            ]
+    # Get user's active booking
+    waiting_appointments = sheets_service.get_waiting_bookings()
+    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    
+    if not user_booking:
+        await update.message.reply_text("❌ ما عندكش حجز نشط.")
+        return
+    
+    ticket_number = user_booking[6]
+    
+    # Create confirmation keyboard
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ نعم", callback_data=f"confirm_delete_{ticket_number}"),
+            InlineKeyboardButton("❌ لا", callback_data=f"cancel_delete_{ticket_number}")
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "⚠️ هل أنت متأكد أنك تريد حذف حجزك؟\n"
-            "هذا الإجراء لا يمكن التراجع عنه.",
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.error(f"Error in handle_client_delete: {str(e)}")
-        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
-
-async def handle_client_delete_confirmation(update: Update, context):
-    query = update.callback_query
-    await query.answer()
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    try:
-        # Extract ticket number from callback data
-        ticket_number = int(query.data.split('_')[2])
-        
-        if query.data.startswith("confirm_delete"):
-            # Delete the booking from the sheet
-            if sheets_service.delete_booking(ticket_number):
-                await query.edit_message_text("✅ تم حذف حجزك بنجاح")
-            else:
-                await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
-        else:
-            # User cancelled the deletion
-            await query.edit_message_text("تم إلغاء عملية الحذف")
-    except Exception as e:
-        logger.error(f"Error in handle_client_delete_confirmation: {str(e)}")
-        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+    await update.message.reply_text(
+        "⚠️ هل أنت متأكد أنك تريد حذف حجزك؟\n"
+        "هذا الإجراء لا يمكن التراجع عنه.",
+        reply_markup=reply_markup
+    )
 
-async def handle_client_done(update: Update, context):
-    query = update.callback_query
-    await query.answer()
+async def handle_done_request(update: Update, context):
+    """Handle the done button press from the main menu."""
+    user_id = str(update.message.chat_id)
     
-    try:
-        # Extract ticket number from callback data
-        ticket_number = int(query.data.split('_')[2])
-        
-        # Update the status in the sheet
-        if sheets_service.update_booking_status(ticket_number, "Done"):
-            await query.edit_message_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
-        else:
-            await query.edit_message_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
-    except Exception as e:
-        logger.error(f"Error in handle_client_done: {str(e)}")
-        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+    # Get user's active booking
+    waiting_appointments = sheets_service.get_waiting_bookings()
+    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    
+    if not user_booking:
+        await update.message.reply_text("❌ ما عندكش حجز نشط.")
+        return
+    
+    ticket_number = user_booking[6]
+    
+    # Update the status in the sheet
+    if sheets_service.update_booking_status(ticket_number, "Done"):
+        await update.message.reply_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
+    else:
+        await update.message.reply_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
 
 async def is_admin(user_id: str, context) -> bool:
     """Check if user is an admin."""
@@ -927,9 +906,8 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_[0-9]+$"))
         application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
         application.add_handler(CallbackQueryHandler(handle_delete_done_booking, pattern="^delete_done_[0-9]+$"))
-        application.add_handler(CallbackQueryHandler(handle_client_delete, pattern="^client_delete_[0-9]+$"))
-        application.add_handler(CallbackQueryHandler(handle_client_delete_confirmation, pattern="^(confirm|cancel)_delete_[0-9]+$"))
-        application.add_handler(CallbackQueryHandler(handle_client_done, pattern="^client_done_[0-9]+$"))
+        application.add_handler(CallbackQueryHandler(handle_delete_request, pattern="^delete_"))
+        application.add_handler(CallbackQueryHandler(handle_done_request, pattern="^done_"))
 
         # Initialize job queue for notifications with 1-minute interval
         if application.job_queue:
