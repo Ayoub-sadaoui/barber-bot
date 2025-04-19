@@ -231,11 +231,22 @@ notification_service = NotificationService()
 async def start(update: Update, context):
     """Start the conversation and show available options."""
     logger.info(f"Start command received from user {update.message.chat_id}")
+    user_id = str(update.message.chat_id)
+    
+    # Get user's active booking
+    waiting_appointments = sheets_service.get_waiting_bookings()
+    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    
+    # Base keyboard
     keyboard = [
         [BTN_VIEW_QUEUE, BTN_BOOK_APPOINTMENT],
-        [BTN_CHECK_WAIT],
-        [BTN_DELETE, BTN_CHANGE_STATUS]
+        [BTN_CHECK_WAIT]
     ]
+    
+    # Add management buttons if user has an active booking
+    if user_booking:
+        keyboard.append([BTN_DELETE, BTN_CHANGE_STATUS])
+    
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "👋 مرحبا بيك عند الحلاق!\n"
@@ -415,6 +426,8 @@ async def handle_done_request(update: Update, context):
     # Update the status in the sheet
     if sheets_service.update_booking_status(ticket_number, "Done"):
         await update.message.reply_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
+        # Refresh the menu to remove the buttons
+        await start(update, context)
     else:
         await update.message.reply_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
 
@@ -835,6 +848,30 @@ async def handle_delete_done_booking(update: Update, context):
         logger.error(f"Error type: {type(e)}")
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
+async def handle_delete_confirmation(update: Update, context):
+    """Handle the confirmation of booking deletion."""
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[2])
+        
+        if query.data.startswith("confirm_delete"):
+            # Delete the booking from the sheet
+            if sheets_service.delete_booking(ticket_number):
+                await query.edit_message_text("✅ تم حذف حجزك بنجاح")
+                # Refresh the menu to remove the buttons
+                await start(update, context)
+            else:
+                await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
+        else:
+            # User cancelled the deletion
+            await query.edit_message_text("تم إلغاء عملية الحذف")
+    except Exception as e:
+        logger.error(f"Error in handle_delete_confirmation: {str(e)}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+
 # Modify the main function to fix the event loop issue
 def main():
     """Set up and run the bot."""
@@ -910,6 +947,9 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_delete_done_booking, pattern="^delete_done_[0-9]+$"))
         application.add_handler(CallbackQueryHandler(handle_delete_request, pattern="^delete_"))
         application.add_handler(CallbackQueryHandler(handle_done_request, pattern="^done_"))
+        application.add_handler(MessageHandler(filters.Text([BTN_DELETE]), handle_delete_request))
+        application.add_handler(MessageHandler(filters.Text([BTN_CHANGE_STATUS]), handle_done_request))
+        application.add_handler(CallbackQueryHandler(handle_delete_confirmation, pattern="^(confirm|cancel)_delete_[0-9]+$"))
 
         # Initialize job queue for notifications with 1-minute interval
         if application.job_queue:
