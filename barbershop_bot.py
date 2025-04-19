@@ -103,7 +103,6 @@ class SheetsService:
                     return True
             
             logger.error(f"No matching row found for ticket {row_index}")
-            return False
         except Exception as e:
             logger.error(f"Error updating status: {str(e)}")
             logger.error(f"Error type: {type(e)}")
@@ -220,7 +219,6 @@ class NotificationService:
                 
                 except Exception as e:
                     logging.error(f"Error sending notification to user {user_id}: {str(e)}")
-                    
         except Exception as e:
             logging.error(f"Error in send_notifications: {str(e)}")
 
@@ -291,18 +289,18 @@ async def choose_barber(update: Update, context):
             time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
             
             await update.message.reply_text(
-                f"❌ عندك رنديفو فايت.\n"
-                f"🔢 مرتبتك في لاشان: {position}\n"
-                f"⏳ وقت الانتظار المقدر: {time_msg}\n"
-                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
-            )
+                    f"❌ عندك رنديفو فايت.\n"
+                    f"🔢 مرتبتك في لاشان: {position}\n"
+                    f"⏳ وقت الانتظار المقدر: {time_msg}\n"
+                    "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+                )
         else:
             await update.message.reply_text(
-                "❌ عندك رنديفو فايت.\n"
-                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
-            )
+                    "❌ عندك رنديفو فايت.\n"
+                    "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+                )
         return ConversationHandler.END
-        
+    
     keyboard = [
         [InlineKeyboardButton(f"👨‍💇‍♂️ {BARBERS['barber_1']}", callback_data="barber_1")],
         [InlineKeyboardButton(f"👨‍💇‍♂️ {BARBERS['barber_2']}", callback_data="barber_2")]
@@ -310,7 +308,7 @@ async def choose_barber(update: Update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await update.message.reply_text(
+            await update.message.reply_text(
             "💈 شوف منين تحب تحلق:",
             reply_markup=reply_markup
         )
@@ -319,7 +317,7 @@ async def choose_barber(update: Update, context):
         logger.error(f"Error in choose_barber: {e}")
         await update.message.reply_text("❌ عندنا مشكل. حاول مرة أخرى.")
         return ConversationHandler.END
-
+        
 async def barber_selection(update: Update, context):
     """Handle the barber selection."""
     query = update.callback_query
@@ -361,15 +359,89 @@ async def handle_phone(update: Update, context):
     hours = wait_time // 60 if wait_time else 0
     minutes = wait_time % 60 if wait_time else 0
     time_msg = f"{wait_time} دقيقة" if wait_time and wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
-            
+    
+    # Create keyboard with management buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("❌ امسح الحجز", callback_data=f"client_delete_{ticket_number}"),
+            InlineKeyboardButton("✅ خلصت", callback_data=f"client_done_{ticket_number}")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+                
     await update.message.reply_text(
         f"✅ تم حجز موعدك!\n"
         f"🎫 رقم تيكيتك: {ticket_number}\n"
         f"💇‍♂️ الحلاق: {barber}\n"
         f"🔢 مرتبتك في لاشان: {position}\n"
-        f"⏳ وقت الانتظار المقدر: {time_msg}"
+        f"⏳ وقت الانتظار المقدر: {time_msg}",
+        reply_markup=reply_markup
     )
     return ConversationHandler.END
+
+async def handle_client_delete(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[2])
+        
+        # Create confirmation keyboard
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ نعم", callback_data=f"confirm_delete_{ticket_number}"),
+                InlineKeyboardButton("❌ لا", callback_data=f"cancel_delete_{ticket_number}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "⚠️ هل أنت متأكد أنك تريد حذف حجزك؟\n"
+            "هذا الإجراء لا يمكن التراجع عنه.",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Error in handle_client_delete: {str(e)}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+
+async def handle_client_delete_confirmation(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[2])
+        
+        if query.data.startswith("confirm_delete"):
+            # Delete the booking from the sheet
+            if sheets_service.delete_booking(ticket_number):
+                await query.edit_message_text("✅ تم حذف حجزك بنجاح")
+            else:
+                await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
+        else:
+            # User cancelled the deletion
+            await query.edit_message_text("تم إلغاء عملية الحذف")
+    except Exception as e:
+        logger.error(f"Error in handle_client_delete_confirmation: {str(e)}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+
+async def handle_client_done(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        # Extract ticket number from callback data
+        ticket_number = int(query.data.split('_')[2])
+        
+        # Update the status in the sheet
+        if sheets_service.update_booking_status(ticket_number, "Done"):
+            await query.edit_message_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
+        else:
+            await query.edit_message_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
+    except Exception as e:
+        logger.error(f"Error in handle_client_done: {str(e)}")
+        await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 async def is_admin(user_id: str, context) -> bool:
     """Check if user is an admin."""
@@ -404,8 +476,8 @@ async def verify_admin_password(update: Update, context):
     if update.message.text != ADMIN_PASSWORD:
         logger.warning(f"Failed password attempt by user {update.message.chat_id}")
         await update.message.reply_text("❌ كلمة السر ماشي صحيحة.")
-        return ConversationHandler.END
-    
+    return ConversationHandler.END
+
     # Set admin status in user_data
     context.user_data['is_admin'] = True
     logger.info(f"Successful admin login by user {update.message.chat_id}")
@@ -428,12 +500,12 @@ async def view_waiting_bookings(update: Update, context):
     if not await is_admin(str(update.message.chat_id), context):
         await update.message.reply_text("❌ ما عندكش الصلاحيات باش تشوف هاد الصفحة.")
         return
-
+    
     waiting_appointments = sheets_service.get_waiting_bookings()
     if not waiting_appointments:
         await update.message.reply_text("ما كاين حتى واحد في لاشان")
         return
-
+        
     # Send header message
     await update.message.reply_text("📋 لاشان الانتظار:")
     
@@ -482,7 +554,7 @@ async def view_done_bookings(update: Update, context):
         # Create keyboard with delete button
         keyboard = [[InlineKeyboardButton(f"❌ امسح", callback_data=f"delete_done_{appointment[6]}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+            
         # Send message with delete button
         await update.message.reply_text(message, reply_markup=reply_markup)
 
@@ -554,7 +626,7 @@ async def handle_delete_booking(update: Update, context):
             logger.error(f"Invalid callback data format: {callback_data}")
             await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
             return
-            
+        
         try:
             ticket_number = int(callback_data.split("_")[1])
             logger.info(f"Attempting to delete ticket {ticket_number}")
@@ -650,29 +722,29 @@ async def handle_queue_view(update: Update, context):
         
         if position1 is None and position2 is None:
             message += "\n❌ ما عندكش رنديفو."
-    else:
-        # Show specific barber's queue
-        barber_name = data.replace("view_queue_", "")
-        barber_queue = await get_barber_queue(barber_name)
-        
-        message = f"📋 لاشان {barber_name}:\n\n"
-        if not barber_queue:
-            message += "ما كاين حتى واحد في لاشان\n"
         else:
-            for i, appointment in enumerate(barber_queue, 1):
-                status = "👤" if appointment[0] == user_id else "⏳"
-                message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
-        
-        # Add user's position and wait time if they have an appointment
-        position, wait_time = await get_position_and_wait_time(user_id, barber_name)
-        if position is not None:
-            hours = wait_time // 60
-            minutes = wait_time % 60
-            time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
-            message += f"\n🔢 مرتبتك: {position}\n"
-            message += f"⏳ وقت الانتظار: {time_msg}\n"
-        else:
-            message += "\n❌ ما عندكش رنديفو مع هذا الحلاق."
+            # Show specific barber's queue
+            barber_name = data.replace("view_queue_", "")
+            barber_queue = await get_barber_queue(barber_name)
+            
+            message = f"📋 لاشان {barber_name}:\n\n"
+            if not barber_queue:
+                message += "ما كاين حتى واحد في لاشان\n"
+            else:
+                for i, appointment in enumerate(barber_queue, 1):
+                    status = "👤" if appointment[0] == user_id else "⏳"
+                    message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+            
+            # Add user's position and wait time if they have an appointment
+            position, wait_time = await get_position_and_wait_time(user_id, barber_name)
+            if position is not None:
+                hours = wait_time // 60
+                minutes = wait_time % 60
+                time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
+                message += f"\n🔢 مرتبتك: {position}\n"
+                message += f"⏳ وقت الانتظار: {time_msg}\n"
+            else:
+                message += "\n❌ ما عندكش رنديفو مع هذا الحلاق."
     
     await query.edit_message_text(message)
 
@@ -763,7 +835,7 @@ async def handle_delete_done_booking(update: Update, context):
             logger.error(f"Invalid callback data format: {callback_data}")
             await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
             return
-            
+        
         try:
             ticket_number = int(callback_data.split("_")[2])
             logger.info(f"Attempting to delete done ticket {ticket_number}")
@@ -860,6 +932,9 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_[0-9]+$"))
         application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
         application.add_handler(CallbackQueryHandler(handle_delete_done_booking, pattern="^delete_done_[0-9]+$"))
+        application.add_handler(CallbackQueryHandler(handle_client_delete, pattern="^client_delete_[0-9]+$"))
+        application.add_handler(CallbackQueryHandler(handle_client_delete_confirmation, pattern="^(confirm|cancel)_delete_[0-9]+$"))
+        application.add_handler(CallbackQueryHandler(handle_client_done, pattern="^client_done_[0-9]+$"))
 
         # Initialize job queue for notifications with 1-minute interval
         if application.job_queue:
