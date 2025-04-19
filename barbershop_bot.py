@@ -43,6 +43,7 @@ BTN_DELETE = "❌ امسح"
 BTN_ADD = "➕ زيد واحد"
 BTN_REFRESH = "🔄 شارجي"
 BTN_BACK = "🔙 ارجع"
+BTN_ADMIN = "👋 مرحبا بيك في لوحة التحكم"
 
 # Conversation States
 SELECTING_BARBER, ENTERING_NAME, ENTERING_PHONE, ADMIN_VERIFICATION = range(4)
@@ -447,25 +448,25 @@ async def verify_admin_password(update: Update, context):
     """Verify the admin password and show admin panel if correct."""
     logger.info(f"Password verification attempt by user {update.message.chat_id}")
     
-    if update.message.text != ADMIN_PASSWORD:
+    if update.message.text == ADMIN_PASSWORD:
+        # Set admin status in user_data
+        context.user_data['is_admin'] = True
+        logger.info(f"Successful admin login by user {update.message.chat_id}")
+        
+        keyboard = [
+            [BTN_VIEW_WAITING, BTN_VIEW_DONE],
+            [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
+            [BTN_ADD, BTN_REFRESH]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "👋 مرحبا بيك في لوحة التحكم:",
+            reply_markup=reply_markup
+        )
+    else:
         logger.warning(f"Failed password attempt by user {update.message.chat_id}")
         await update.message.reply_text("❌ كلمة السر ماشي صحيحة.")
-    return ConversationHandler.END
-
-    # Set admin status in user_data
-    context.user_data['is_admin'] = True
-    logger.info(f"Successful admin login by user {update.message.chat_id}")
     
-    keyboard = [
-        [BTN_VIEW_WAITING, BTN_VIEW_DONE],
-        [BTN_VIEW_BARBER1, BTN_VIEW_BARBER2],
-        [BTN_ADD, BTN_REFRESH]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "👋 مرحبا بيك في لوحة التحكم:",
-        reply_markup=reply_markup
-    )
     return ConversationHandler.END
 
 async def view_waiting_bookings(update: Update, context):
@@ -847,10 +848,11 @@ def main():
         # Create the Application with proper error handling
         application = Application.builder().token(token).build()
 
-        # Create admin conversation handler (only for /admin command and initial password)
+        # Create admin conversation handler
         admin_handler = ConversationHandler(
             entry_points=[
-                CommandHandler("admin", admin_panel)
+                CommandHandler("admin", admin_panel),
+                MessageHandler(filters.Text([BTN_ADMIN]), admin_panel)
             ],
             states={
                 ADMIN_VERIFICATION: [
