@@ -289,16 +289,16 @@ async def choose_barber(update: Update, context):
             time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
             
             await update.message.reply_text(
-                    f"❌ عندك رنديفو فايت.\n"
-                    f"🔢 مرتبتك في لاشان: {position}\n"
-                    f"⏳ وقت الانتظار المقدر: {time_msg}\n"
-                    "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
-                )
+                f"❌ عندك رنديفو فايت.\n"
+                f"🔢 مرتبتك في لاشان: {position}\n"
+                f"⏳ وقت الانتظار المقدر: {time_msg}\n"
+                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+            )
         else:
             await update.message.reply_text(
-                    "❌ عندك رنديفو فايت.\n"
-                    "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
-                )
+                "❌ عندك رنديفو فايت.\n"
+                "ما تقدرش دير رنديفو جديد حتى يخلص لي فايت."
+            )
         return ConversationHandler.END
     
     keyboard = [
@@ -307,16 +307,11 @@ async def choose_barber(update: Update, context):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    try:
-            await update.message.reply_text(
-            "💈 شوف منين تحب تحلق:",
-            reply_markup=reply_markup
-        )
-        return SELECTING_BARBER
-    except Exception as e:
-        logger.error(f"Error in choose_barber: {e}")
-        await update.message.reply_text("❌ عندنا مشكل. حاول مرة أخرى.")
-        return ConversationHandler.END
+    await update.message.reply_text(
+        "💈 شوف منين تحب تحلق:",
+        reply_markup=reply_markup
+    )
+    return SELECTING_BARBER
         
 async def barber_selection(update: Update, context):
     """Handle the barber selection."""
