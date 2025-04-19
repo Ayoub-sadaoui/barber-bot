@@ -864,21 +864,41 @@ async def handle_delete_confirmation(update: Update, context):
     
     try:
         # Extract ticket number from callback data
-        ticket_number = int(query.data.split('_')[2])
+        callback_data = query.data
+        logger.info(f"Received callback data: {callback_data}")
         
-        if query.data.startswith("confirm_delete"):
-            # Delete the booking from the sheet
-            if sheets_service.delete_booking(ticket_number):
-                await query.edit_message_text("✅ تم حذف حجزك بنجاح")
-                # Refresh the menu to remove the buttons
-                await start(update, context)
+        if not callback_data.startswith(("confirm_delete_", "cancel_delete_")):
+            logger.error(f"Invalid callback data format: {callback_data}")
+            await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
+            return
+            
+        try:
+            ticket_number = int(callback_data.split("_")[2])
+            logger.info(f"Processing deletion for ticket {ticket_number}")
+            
+            if callback_data.startswith("confirm_delete_"):
+                # Delete the booking from the sheet
+                if sheets_service.delete_booking(ticket_number):
+                    logger.info(f"Successfully deleted ticket {ticket_number}")
+                    # Show success message
+                    await query.edit_message_text("✅ تم حذف حجزك بنجاح")
+                    # Refresh the menu to remove the buttons
+                    await start(update, context)
+                else:
+                    logger.error(f"Failed to delete ticket {ticket_number}")
+                    await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
             else:
-                await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
-        else:
-            # User cancelled the deletion
-            await query.edit_message_text("تم إلغاء عملية الحذف")
+                # User cancelled the deletion
+                logger.info(f"User cancelled deletion for ticket {ticket_number}")
+                await query.edit_message_text("تم إلغاء عملية الحذف")
+                
+        except (IndexError, ValueError) as e:
+            logger.error(f"Error extracting ticket number: {e}")
+            await query.edit_message_text("❌ عندنا مشكل في حذف الحجز. حاول مرة أخرى.")
+            
     except Exception as e:
         logger.error(f"Error in handle_delete_confirmation: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
         await query.edit_message_text("❌ عندنا مشكل. حاول مرة أخرى.")
 
 # Modify the main function to fix the event loop issue
