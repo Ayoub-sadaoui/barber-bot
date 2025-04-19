@@ -235,7 +235,15 @@ async def start(update: Update, context):
     
     # Get user's active booking
     waiting_appointments = sheets_service.get_waiting_bookings()
-    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    logger.info(f"Found {len(waiting_appointments)} waiting appointments")
+    
+    # Check if user has an active booking
+    user_booking = None
+    for booking in waiting_appointments:
+        if booking[0] == user_id:
+            user_booking = booking
+            logger.info(f"Found active booking for user {user_id}: {booking}")
+            break
     
     # Base keyboard
     keyboard = [
@@ -245,8 +253,10 @@ async def start(update: Update, context):
     
     # Add management buttons if user has an active booking
     if user_booking:
+        logger.info(f"Adding management buttons for user {user_id}")
         keyboard.append([BTN_DELETE, BTN_CHANGE_STATUS])
-        logger.info(f"User {user_id} has an active booking, showing management buttons")
+    else:
+        logger.info(f"No active booking found for user {user_id}")
     
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
@@ -388,7 +398,12 @@ async def handle_delete_request(update: Update, context):
     
     # Get user's active booking
     waiting_appointments = sheets_service.get_waiting_bookings()
-    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    user_booking = None
+    for booking in waiting_appointments:
+        if booking[0] == user_id:
+            user_booking = booking
+            logger.info(f"Found active booking for user {user_id}: {booking}")
+            break
     
     if not user_booking:
         logger.warning(f"User {user_id} tried to delete but has no active booking")
@@ -396,7 +411,7 @@ async def handle_delete_request(update: Update, context):
         return
     
     ticket_number = user_booking[6]
-    logger.info(f"Found active booking for user {user_id} with ticket {ticket_number}")
+    logger.info(f"Processing deletion for ticket {ticket_number}")
     
     # Create confirmation keyboard
     keyboard = [
@@ -420,7 +435,12 @@ async def handle_done_request(update: Update, context):
     
     # Get user's active booking
     waiting_appointments = sheets_service.get_waiting_bookings()
-    user_booking = next((booking for booking in waiting_appointments if booking[0] == user_id), None)
+    user_booking = None
+    for booking in waiting_appointments:
+        if booking[0] == user_id:
+            user_booking = booking
+            logger.info(f"Found active booking for user {user_id}: {booking}")
+            break
     
     if not user_booking:
         logger.warning(f"User {user_id} tried to mark as done but has no active booking")
@@ -428,7 +448,7 @@ async def handle_done_request(update: Update, context):
         return
     
     ticket_number = user_booking[6]
-    logger.info(f"Found active booking for user {user_id} with ticket {ticket_number}")
+    logger.info(f"Processing done status for ticket {ticket_number}")
     
     # Update the status in the sheet
     if sheets_service.update_booking_status(ticket_number, "Done"):
