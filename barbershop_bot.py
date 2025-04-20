@@ -392,73 +392,58 @@ async def handle_phone(update: Update, context):
     return ConversationHandler.END
 
 async def handle_delete_request(update: Update, context):
-    """Handle the delete button press from the main menu."""
-    user_id = str(update.message.chat_id)
-    logger.info(f"Delete request from user {user_id}")
+    query = update.callback_query
+    await query.answer()
     
-    # Get user's active booking
-    waiting_appointments = sheets_service.get_waiting_bookings()
-    user_booking = None
-    for booking in waiting_appointments:
-        if booking[0] == user_id:
-            user_booking = booking
-            logger.info(f"Found active booking for user {user_id}: {booking}")
-            break
+    # Extract ticket number from callback data
+    ticket_number = query.data.replace("delete_booking_", "")
     
-    if not user_booking:
-        logger.warning(f"User {user_id} tried to delete but has no active booking")
-        await update.message.reply_text("❌ ما عندكش حجز نشط.")
-        return
-    
-    ticket_number = user_booking[6]
-    logger.info(f"Processing deletion for ticket {ticket_number}")
-    
-    # Create confirmation keyboard
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ نعم", callback_data=f"confirm_delete_{ticket_number}"),
-            InlineKeyboardButton("❌ لا", callback_data=f"cancel_delete_{ticket_number}")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "⚠️ هل أنت متأكد أنك تريد حذف حجزك؟\n"
-        "هذا الإجراء لا يمكن التراجع عنه.",
-        reply_markup=reply_markup
-    )
+    try:
+        # Delete the booking
+        await sheets_service.delete_booking(ticket_number)
+        
+        # Update the message to show it was deleted
+        await query.edit_message_text(
+            f"✅ تم حذف الرنديفو رقم {ticket_number} بنجاح",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔄 تحديث", callback_data="view_all_queues")
+            ]])
+        )
+    except Exception as e:
+        logger.error(f"Error deleting booking: {str(e)}")
+        await query.edit_message_text(
+            "❌ حدث خطأ أثناء حذف الرنديفو. حاول مرة أخرى.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔄 تحديث", callback_data="view_all_queues")
+            ]])
+        )
 
 async def handle_done_request(update: Update, context):
-    """Handle the done button press from the main menu."""
-    user_id = str(update.message.chat_id)
-    logger.info(f"Done request from user {user_id}")
+    query = update.callback_query
+    await query.answer()
     
-    # Get user's active booking
-    waiting_appointments = sheets_service.get_waiting_bookings()
-    user_booking = None
-    for booking in waiting_appointments:
-        if booking[0] == user_id:
-            user_booking = booking
-            logger.info(f"Found active booking for user {user_id}: {booking}")
-            break
+    # Extract ticket number from callback data
+    ticket_number = query.data.replace("done_booking_", "")
     
-    if not user_booking:
-        logger.warning(f"User {user_id} tried to mark as done but has no active booking")
-        await update.message.reply_text("❌ ما عندكش حجز نشط.")
-        return
-    
-    ticket_number = user_booking[6]
-    logger.info(f"Processing done status for ticket {ticket_number}")
-    
-    # Update the status in the sheet
-    if sheets_service.update_booking_status(ticket_number, "Done"):
-        logger.info(f"Successfully marked booking {ticket_number} as done")
-        await update.message.reply_text("✅ تم تحديث حالة حجزك إلى 'مكتمل'")
-        # Refresh the menu to remove the buttons
-        await start(update, context)
-    else:
-        logger.error(f"Failed to mark booking {ticket_number} as done")
-        await update.message.reply_text("❌ عندنا مشكل في تحديث الحالة. حاول مرة أخرى.")
+    try:
+        # Update the booking status to done
+        await sheets_service.update_booking_status(ticket_number, "تم")
+        
+        # Update the message to show it was marked as done
+        await query.edit_message_text(
+            f"✅ تم تأكيد انتهاء الرنديفو رقم {ticket_number}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔄 تحديث", callback_data="view_all_queues")
+            ]])
+        )
+    except Exception as e:
+        logger.error(f"Error marking booking as done: {str(e)}")
+        await query.edit_message_text(
+            "❌ حدث خطأ أثناء تأكيد انتهاء الرنديفو. حاول مرة أخرى.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔄 تحديث", callback_data="view_all_queues")
+            ]])
+        )
 
 async def is_admin(user_id: str, context) -> bool:
     """Check if user is an admin."""
@@ -739,29 +724,29 @@ async def handle_queue_view(update: Update, context):
         
         if position1 is None and position2 is None:
             message += "\n❌ ما عندكش رنديفو."
+    else:
+        # Show specific barber's queue
+        barber_name = data.replace("view_queue_", "")
+        barber_queue = await get_barber_queue(barber_name)
+        
+        message = f"📋 لاشان {barber_name}:\n\n"
+        if not barber_queue:
+            message += "ما كاين حتى واحد في لاشان\n"
         else:
-            # Show specific barber's queue
-            barber_name = data.replace("view_queue_", "")
-            barber_queue = await get_barber_queue(barber_name)
-            
-            message = f"📋 لاشان {barber_name}:\n\n"
-            if not barber_queue:
-                message += "ما كاين حتى واحد في لاشان\n"
-            else:
-                for i, appointment in enumerate(barber_queue, 1):
-                    status = "👤" if appointment[0] == user_id else "⏳"
-                    message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
-            
-            # Add user's position and wait time if they have an appointment
-            position, wait_time = await get_position_and_wait_time(user_id, barber_name)
-            if position is not None:
-                hours = wait_time // 60
-                minutes = wait_time % 60
-                time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
-                message += f"\n🔢 مرتبتك: {position}\n"
-                message += f"⏳ وقت الانتظار: {time_msg}\n"
-            else:
-                message += "\n❌ ما عندكش رنديفو مع هذا الحلاق."
+            for i, appointment in enumerate(barber_queue, 1):
+                status = "👤" if appointment[0] == user_id else "⏳"
+                message += f"{i}. {status} {appointment[1]} - رقم: {appointment[6]}\n"
+        
+        # Add user's position and wait time if they have an appointment
+        position, wait_time = await get_position_and_wait_time(user_id, barber_name)
+        if position is not None:
+            hours = wait_time // 60
+            minutes = wait_time % 60
+            time_msg = f"{wait_time} دقيقة" if wait_time < 60 else f"{hours} ساعة و {minutes} دقيقة"
+            message += f"\n🔢 مرتبتك: {position}\n"
+            message += f"⏳ وقت الانتظار: {time_msg}\n"
+        else:
+            message += "\n❌ ما عندكش رنديفو مع هذا الحلاق."
     
     await query.edit_message_text(message)
 
@@ -994,11 +979,9 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_delete_booking, pattern="^delete_[0-9]+$"))
         application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_(all_queues|queue_)"))
         application.add_handler(CallbackQueryHandler(handle_delete_done_booking, pattern="^delete_done_[0-9]+$"))
-        application.add_handler(CallbackQueryHandler(handle_delete_request, pattern="^delete_"))
-        application.add_handler(CallbackQueryHandler(handle_done_request, pattern="^done_"))
-        application.add_handler(MessageHandler(filters.Text([BTN_DELETE]), handle_delete_request))
-        application.add_handler(MessageHandler(filters.Text([BTN_CHANGE_STATUS]), handle_done_request))
-        application.add_handler(CallbackQueryHandler(handle_delete_confirmation, pattern="^(confirm|cancel)_delete_[0-9]+$"))
+        application.add_handler(CallbackQueryHandler(handle_delete_request, pattern="^delete_booking_"))
+        application.add_handler(CallbackQueryHandler(handle_done_request, pattern="^done_booking_"))
+        application.add_handler(CallbackQueryHandler(handle_queue_view, pattern="^view_queue_|^view_all_queues$"))
 
         # Initialize job queue for notifications with 1-minute interval
         if application.job_queue:
